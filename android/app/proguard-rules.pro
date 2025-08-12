@@ -54,3 +54,21 @@
 
 # Mobile scanner
 -keep class dev.steenbakker.mobile_scanner.** { *; }
+
+# Google Play Core (for Flutter deferred components)
+-keep class com.google.android.play.core.** { *; }
+-dontwarn com.google.android.play.core.**
+
+# Play Core Split Compatibility
+-keep class com.google.android.play.core.splitcompat.** { *; }
+-keep class com.google.android.play.core.splitinstall.** { *; }
+-keep class com.google.android.play.core.tasks.** { *; }
+
+# Flutter Play Store Split Application
+-keep class io.flutter.app.FlutterPlayStoreSplitApplication { *; }
+-keep class io.flutter.embedding.engine.deferredcomponents.** { *; }
+
+# Prevent obfuscation of Play Core classes
+-keepnames class com.google.android.play.core.splitcompat.SplitCompatApplication
+-keepnames class com.google.android.play.core.splitinstall.**
+-keepnames class com.google.android.play.core.tasks.**
