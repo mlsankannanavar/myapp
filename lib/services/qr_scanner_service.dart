@@ -16,6 +16,7 @@ class QrScannerService extends ChangeNotifier {
   bool _isScanning = false;
   String? _lastScannedCode;
   DateTime? _lastScanTime;
+  String? _scannedData;
 
   // Getters
   MobileScannerController? get controller => _controller;
@@ -23,6 +24,7 @@ class QrScannerService extends ChangeNotifier {
   bool get isScanning => _isScanning;
   String? get lastScannedCode => _lastScannedCode;
   DateTime? get lastScanTime => _lastScanTime;
+  String? get scannedData => _scannedData;
 
   // Initialize the QR scanner
   Future<bool> initialize() async {
