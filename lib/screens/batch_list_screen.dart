@@ -476,26 +476,6 @@ class _BatchListScreenState extends State<BatchListScreen>
     _showBatchDetails(batch);
   }
 
-  void _onBatchFavorited(BatchModel batch) {
-    final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
-    final batchProvider = Provider.of<BatchProvider>(context, listen: false);
-    
-    batchProvider.toggleFavorite(batch.id);
-    
-    loggingProvider.logApp('Batch favorite toggled', data: {
-      'batchId': batch.id,
-      'isFavorite': !batch.isFavorite,
-    });
-  }
-
-  void _onBatchShared(BatchModel batch) {
-    final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
-    loggingProvider.logApp('Batch shared', data: {'batchId': batch.id});
-
-    // Implementation for sharing batch data
-    _shareBatch(batch);
-  }
-
   void _navigateToQRScanner() {
     final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
     loggingProvider.logApp('Navigate to QR scanner from batch list');

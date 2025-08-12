@@ -5,7 +5,6 @@ import '../providers/logging_provider.dart';
 import '../providers/batch_provider.dart';
 import '../services/ocr_service_new.dart';
 import '../widgets/loading_widget.dart';
-import '../widgets/error_widget.dart';
 import '../utils/app_colors.dart';
 import 'dart:io';
 
@@ -592,7 +591,7 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
 
       loggingProvider.logOCR('Starting OCR processing');
 
-      final result = await _ocrService!.processImage(imagePath);
+      final result = await _ocrService.processImage(imagePath);
 
       if (result != null && result.isNotEmpty) {
         final extractedText = result;

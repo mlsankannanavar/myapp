@@ -3,7 +3,6 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import '../providers/batch_provider.dart';
 import '../providers/logging_provider.dart';
-import '../services/qr_scanner_service_new.dart';
 import '../widgets/loading_widget.dart';
 import '../widgets/error_widget.dart';
 import '../utils/app_colors.dart';
@@ -18,7 +17,6 @@ class QRScannerScreen extends StatefulWidget {
 class _QRScannerScreenState extends State<QRScannerScreen>
     with SingleTickerProviderStateMixin {
   late MobileScannerController _scannerController;
-  QRScannerService _qrScannerService = QRScannerService();
   late AnimationController _animationController;
   late Animation<double> _scanLineAnimation;
   
@@ -48,8 +46,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       facing: CameraFacing.back,
       torchEnabled: false,
     );
-    
-    _qrScannerService = QRScannerService();
     
     // Request camera permission
     _requestCameraPermission();

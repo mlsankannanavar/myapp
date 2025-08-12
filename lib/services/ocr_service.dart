@@ -255,7 +255,7 @@ class OcrService extends ChangeNotifier {
 
     for (final block in recognizedText.blocks) {
       for (final line in block.lines) {
-        for (final element in line.elements) {
+        for (final _ in line.elements) {
           // Note: As of current ML Kit version, confidence values might not be available
           // This is a placeholder for when confidence values become available
           totalConfidence += 1.0; // Assuming maximum confidence for now

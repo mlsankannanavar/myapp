@@ -3,7 +3,6 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/api_service.dart';
 import '../services/logging_service.dart';
 import '../models/health_response_model.dart';
-import '../models/log_entry_model.dart';
 import '../utils/constants.dart';
 import '../utils/log_level.dart';
 

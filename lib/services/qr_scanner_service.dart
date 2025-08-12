@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../utils/constants.dart';
 import '../utils/helpers.dart';
 import '../utils/log_level.dart';
 import 'logging_service.dart';
@@ -225,7 +224,7 @@ class QrScannerService extends ChangeNotifier {
       'lastScannedCode': _lastScannedCode,
       'lastScanTime': _lastScanTime?.toIso8601String(),
       'torchEnabled': _controller?.torchEnabled ?? false,
-      'cameraFacing': _controller?.facing?.name ?? 'unknown',
+      'cameraFacing': _controller?.facing.name ?? 'unknown',
     };
   }
 

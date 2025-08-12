@@ -5,7 +5,6 @@ import '../providers/logging_provider.dart';
 import '../providers/batch_provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/constants.dart';
-import '../utils/helpers.dart';
 import 'log_viewer_screen.dart';
 
 class SettingsScreen extends StatefulWidget {

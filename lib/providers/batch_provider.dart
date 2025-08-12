@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../models/batch_model.dart';
-import '../models/log_entry_model.dart';
 import '../services/api_service.dart';
 import '../services/logging_service.dart';
 import '../utils/constants.dart';

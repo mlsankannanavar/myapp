@@ -5,7 +5,6 @@ import '../models/log_entry_model.dart';
 import '../widgets/log_entry_widget.dart';
 import '../widgets/loading_widget.dart';
 import '../utils/app_colors.dart';
-import '../utils/helpers.dart';
 import '../utils/log_level.dart';
 
 class LogViewerScreen extends StatefulWidget {
