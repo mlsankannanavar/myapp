@@ -579,11 +579,6 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
   Future<void> _processImage(String imagePath) async {
     final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
     
-    if (_ocrService == null) {
-      loggingProvider.logError('OCR service not initialized');
-      return;
-    }
-
     try {
       setState(() {
         _isProcessing = true;

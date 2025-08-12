@@ -386,18 +386,16 @@ class _BatchListScreenState extends State<BatchListScreen>
               ),
               textAlign: TextAlign.center,
             ),
-            if (onAction != null) ...[
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: onAction,
-                icon: Icon(icon),
-                label: Text(actionText),
-                style: ElevatedButton.styleFrom(
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: onAction,
+              icon: Icon(icon),
+              label: Text(actionText),
+              style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                 ),
               ),
-            ],
           ],
         ),
       ),
