@@ -101,7 +101,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Text(
         title,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.bold,
           color: AppColors.primary,
@@ -310,7 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               ListTile(
                 title: const Text('API Endpoint'),
-                subtitle: Text(Constants.apiBaseUrl),
+                subtitle: const Text(Constants.apiBaseUrl),
                 leading: const Icon(Icons.api),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,

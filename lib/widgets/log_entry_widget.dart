@@ -380,15 +380,15 @@ class _LogEntryWidgetState extends State<LogEntryWidget>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        const Row(
           children: [
-            const Icon(
+            Icon(
               Icons.error,
               size: 14,
               color: AppColors.logError,
             ),
-            const SizedBox(width: 6),
-            const Text(
+            SizedBox(width: 6),
+            Text(
               'Error',
               style: TextStyle(
                 fontSize: 12,

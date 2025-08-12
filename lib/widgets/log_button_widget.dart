@@ -55,7 +55,7 @@ class LogButtonWidget extends StatelessWidget {
                     child: Container(
                       width: isSmall ? 4 : 6,
                       height: isSmall ? 4 : 6,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: AppColors.logInfo,
                         shape: BoxShape.circle,
                       ),
