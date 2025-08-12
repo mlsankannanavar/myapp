@@ -63,9 +63,9 @@ class LoadingWidget extends StatelessWidget {
       case LoadingType.circular:
         return const CircularProgressIndicator();
       case LoadingType.linear:
-        return Container(
+        return const SizedBox(
           width: 200,
-          child: const LinearProgressIndicator(),
+          child: LinearProgressIndicator(),
         );
       case LoadingType.shimmer:
         return _buildShimmerLoading();

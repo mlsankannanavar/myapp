@@ -692,7 +692,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Batch ${batch.batchNumber}'),
-        content: Text('Batch details will be implemented here.'),
+        content: const Text('Batch details will be implemented here.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
