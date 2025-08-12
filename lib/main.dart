@@ -41,10 +41,10 @@ class BatchMateApp extends StatelessWidget {
             elevation: 0,
             surfaceTintColor: Colors.transparent,
           ),
-          cardTheme: const CardThemeData(
+          cardTheme: CardThemeData(
             elevation: 2,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(12)),
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
           elevatedButtonTheme: ElevatedButtonThemeData(
