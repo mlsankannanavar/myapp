@@ -151,29 +151,21 @@ class ApiResponse<T> {
 
   @override
   String toString() {
-    return 'ApiResponse(success: $success, statusCode: $statusCode, message: ${displayMessage})';
+    return 'ApiResponse(success: $success, statusCode: $statusCode, message: $displayMessage)';
   }
 }
 
 // Specialized response for batch data
 class BatchListResponse extends ApiResponse<List<BatchModel>> {
   BatchListResponse({
-    required bool success,
-    List<BatchModel>? data,
-    String? message,
-    String? error,
-    int? statusCode,
-    Map<String, String>? headers,
-    Duration? duration,
-  }) : super(
-    success: success,
-    data: data,
-    message: message,
-    error: error,
-    statusCode: statusCode,
-    headers: headers,
-    duration: duration,
-  );
+    required super.success,
+    super.data,
+    super.message,
+    super.error,
+    super.statusCode,
+    super.headers,
+    super.duration,
+  });
 
   factory BatchListResponse.fromApiResponse(ApiResponse<Map<String, dynamic>> response) {
     if (response.isError) {

@@ -365,9 +365,7 @@ class BatchProvider extends ChangeNotifier {
       }
       
       final sessionId = _currentSessionId ?? _generateSessionId();
-      if (_currentSessionId == null) {
-        _currentSessionId = sessionId;
-      }
+      _currentSessionId ??= sessionId;
       
       final batch = BatchModel.fromJson(jsonData, sessionId);
       await addBatch(batch);
@@ -387,9 +385,7 @@ class BatchProvider extends ChangeNotifier {
       final batchData = _parseOCRData(extractedText, extractedLines);
       
       final sessionId = _currentSessionId ?? _generateSessionId();
-      if (_currentSessionId == null) {
-        _currentSessionId = sessionId;
-      }
+      _currentSessionId ??= sessionId;
       
       final batch = BatchModel.fromJson(batchData, sessionId);
       await addBatch(batch);
@@ -524,9 +520,7 @@ class BatchProvider extends ChangeNotifier {
   // Load batches method that takes no parameters (for compatibility)
   Future<void> loadBatches() async {
     final sessionId = _currentSessionId ?? _generateSessionId();
-    if (_currentSessionId == null) {
-      _currentSessionId = sessionId;
-    }
+    _currentSessionId ??= sessionId;
     await loadBatchesForSession(sessionId);
   }
 

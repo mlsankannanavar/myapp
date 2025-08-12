@@ -231,7 +231,7 @@ class LoggingService extends ChangeNotifier {
     buffer.writeln('BatchMate Application Logs');
     buffer.writeln('Generated: ${Helpers.formatDateTime(DateTime.now())}');
     buffer.writeln('Total Logs: ${logsToExport.length}');
-    buffer.writeln('${'=' * 50}');
+    buffer.writeln('=' * 50);
     buffer.writeln();
     
     for (final log in logsToExport) {

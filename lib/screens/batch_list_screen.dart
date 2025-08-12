@@ -555,11 +555,11 @@ class _BatchListScreenState extends State<BatchListScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Filter Batches'),
-        content: Column(
+        content: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Add filter options here
-            const Text('Filter options will be implemented here'),
+            Text('Filter options will be implemented here'),
           ],
         ),
         actions: [

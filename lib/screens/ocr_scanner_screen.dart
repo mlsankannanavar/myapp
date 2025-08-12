@@ -198,29 +198,31 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
   Widget _buildCaptureOverlay() {
     return CustomPaint(
       painter: OCROverlayPainter(),
-      child: Container(
+      child: SizedBox(
         width: double.infinity,
         height: double.infinity,
         child: Center(
-          child: Container(
+          child: SizedBox(
             width: 300,
             height: 200,
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: AppColors.primary,
-                width: 2,
-              ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Center(
-              child: Text(
-                'Position text within this frame\nfor better recognition',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: AppColors.primary,
+                  width: 2,
                 ),
-                textAlign: TextAlign.center,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Center(
+                child: Text(
+                  'Position text within this frame\nfor better recognition',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               ),
             ),
           ),

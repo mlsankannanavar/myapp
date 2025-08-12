@@ -261,7 +261,7 @@ class LoggingProvider extends ChangeNotifier {
   // Settings getters/setters
   bool _isDetailedLoggingEnabled = true;
   bool _isAutoExportEnabled = false;
-  int _logRetentionDays = 30;
+  final int _logRetentionDays = 30;
 
   bool get isDetailedLoggingEnabled => _isDetailedLoggingEnabled;
   bool get isAutoExportEnabled => _isAutoExportEnabled;
