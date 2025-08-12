@@ -1,0 +1,286 @@
+import 'package:flutter/foundation.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import '../services/api_service.dart';
+import '../services/logging_service.dart';
+import '../models/health_response_model.dart';
+import '../utils/constants.dart';
+
+enum AppStatus { initializing, ready, error }
+enum ConnectionStatus { connected, disconnected, checking }
+
+class AppStateProvider extends ChangeNotifier {
+  final ApiService _apiService = ApiService();
+  final LoggingService _logger = LoggingService();
+  
+  AppStatus _appStatus = AppStatus.initializing;
+  ConnectionStatus _connectionStatus = ConnectionStatus.checking;
+  HealthResponseModel? _serverHealth;
+  String? _currentSessionId;
+  DateTime? _lastHealthCheck;
+  bool _isInitialized = false;
+  String? _errorMessage;
+
+  // Getters
+  AppStatus get appStatus => _appStatus;
+  ConnectionStatus get connectionStatus => _connectionStatus;
+  HealthResponseModel? get serverHealth => _serverHealth;
+  String? get currentSessionId => _currentSessionId;
+  DateTime? get lastHealthCheck => _lastHealthCheck;
+  bool get isInitialized => _isInitialized;
+  String? get errorMessage => _errorMessage;
+  bool get isConnected => _connectionStatus == ConnectionStatus.connected;
+  bool get isServerHealthy => _serverHealth?.isHealthy ?? false;
+
+  AppStateProvider() {
+    _initializeApp();
+    _startPeriodicHealthCheck();
+    _listenToConnectivityChanges();
+  }
+
+  // Initialize the application
+  Future<void> _initializeApp() async {
+    try {
+      _logger.logApp('Initializing application', level: LogLevel.info);
+      _setAppStatus(AppStatus.initializing);
+
+      // Initialize logging service
+      await _logger.initialize();
+      
+      // Check initial connectivity
+      await _checkConnectivity();
+      
+      // Perform initial health check
+      await checkServerHealth();
+      
+      _isInitialized = true;
+      _setAppStatus(AppStatus.ready);
+      
+      _logger.logApp('Application initialized successfully', 
+          level: LogLevel.success,
+          data: {
+            'connectionStatus': _connectionStatus.name,
+            'serverHealthy': isServerHealthy,
+          });
+    } catch (e, stackTrace) {
+      _logger.logError('Failed to initialize application',
+          error: e, stackTrace: stackTrace);
+      _setAppStatus(AppStatus.error);
+      _setErrorMessage('Failed to initialize application: ${e.toString()}');
+    }
+  }
+
+  // Check server health
+  Future<void> checkServerHealth() async {
+    _logger.logApp('Checking server health');
+    
+    try {
+      final stopwatch = Stopwatch()..start();
+      final response = await _apiService.checkHealth();
+      stopwatch.stop();
+
+      _lastHealthCheck = DateTime.now();
+
+      if (response.isSuccess && response.data != null) {
+        _serverHealth = response.data!;
+        _setConnectionStatus(ConnectionStatus.connected);
+        
+        _logger.logApp('Server health check successful',
+            level: LogLevel.success,
+            data: {
+              'status': _serverHealth!.status,
+              'duration': stopwatch.elapsed.inMilliseconds,
+              'timestamp': _serverHealth!.timestamp.toIso8601String(),
+            });
+      } else {
+        _serverHealth = null;
+        _setConnectionStatus(ConnectionStatus.disconnected);
+        
+        _logger.logApp('Server health check failed',
+            level: LogLevel.error,
+            data: {
+              'error': response.error,
+              'statusCode': response.statusCode,
+              'duration': stopwatch.elapsed.inMilliseconds,
+            });
+      }
+    } catch (e, stackTrace) {
+      _serverHealth = null;
+      _setConnectionStatus(ConnectionStatus.disconnected);
+      _logger.logError('Server health check error',
+          error: e, stackTrace: stackTrace);
+    }
+  }
+
+  // Check network connectivity
+  Future<void> _checkConnectivity() async {
+    try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      
+      if (connectivityResult == ConnectivityResult.none) {
+        _setConnectionStatus(ConnectionStatus.disconnected);
+        _logger.logNetwork('No network connection', level: LogLevel.warning);
+      } else {
+        _logger.logNetwork('Network connection available',
+            data: {'type': connectivityResult.name});
+        // Don't automatically set to connected, wait for health check
+      }
+    } catch (e, stackTrace) {
+      _logger.logError('Failed to check connectivity',
+          error: e, stackTrace: stackTrace, category: 'NETWORK');
+    }
+  }
+
+  // Listen to connectivity changes
+  void _listenToConnectivityChanges() {
+    Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+      _logger.logNetwork('Connectivity changed to ${result.name}');
+      
+      if (result == ConnectivityResult.none) {
+        _setConnectionStatus(ConnectionStatus.disconnected);
+      } else {
+        // Check server health when connectivity is restored
+        _setConnectionStatus(ConnectionStatus.checking);
+        checkServerHealth();
+      }
+    });
+  }
+
+  // Start periodic health checks
+  void _startPeriodicHealthCheck() {
+    Future.delayed(Constants.connectionCheckInterval, () async {
+      if (_isInitialized) {
+        await checkServerHealth();
+        _startPeriodicHealthCheck(); // Schedule next check
+      }
+    });
+  }
+
+  // Set current session ID
+  void setSessionId(String sessionId) {
+    _currentSessionId = sessionId;
+    _logger.logApp('Session ID set',
+        data: {'sessionId': sessionId});
+    notifyListeners();
+  }
+
+  // Clear session
+  void clearSession() {
+    final oldSessionId = _currentSessionId;
+    _currentSessionId = null;
+    _logger.logApp('Session cleared',
+        data: {'previousSessionId': oldSessionId});
+    notifyListeners();
+  }
+
+  // Retry connection
+  Future<void> retryConnection() async {
+    _logger.logApp('Retrying connection');
+    _setConnectionStatus(ConnectionStatus.checking);
+    await _checkConnectivity();
+    await checkServerHealth();
+  }
+
+  // Private setters with logging
+  void _setAppStatus(AppStatus status) {
+    if (_appStatus != status) {
+      final oldStatus = _appStatus;
+      _appStatus = status;
+      _logger.logApp('App status changed',
+          data: {
+            'from': oldStatus.name,
+            'to': status.name,
+          });
+      notifyListeners();
+    }
+  }
+
+  void _setConnectionStatus(ConnectionStatus status) {
+    if (_connectionStatus != status) {
+      final oldStatus = _connectionStatus;
+      _connectionStatus = status;
+      _logger.logNetwork('Connection status changed',
+          data: {
+            'from': oldStatus.name,
+            'to': status.name,
+          });
+      notifyListeners();
+    }
+  }
+
+  void _setErrorMessage(String? message) {
+    _errorMessage = message;
+    if (message != null) {
+      _logger.logError('App error occurred', error: message);
+    }
+    notifyListeners();
+  }
+
+  // Get connection status info
+  Map<String, dynamic> getConnectionInfo() {
+    return {
+      'appStatus': _appStatus.name,
+      'connectionStatus': _connectionStatus.name,
+      'isConnected': isConnected,
+      'isServerHealthy': isServerHealthy,
+      'serverStatus': _serverHealth?.status,
+      'lastHealthCheck': _lastHealthCheck?.toIso8601String(),
+      'currentSession': _currentSessionId,
+      'errorMessage': _errorMessage,
+    };
+  }
+
+  // Performance monitoring
+  void logScreenNavigation(String screenName, {Duration? loadTime}) {
+    _logger.logApp('Screen navigation',
+        data: {
+          'screen': screenName,
+          'timestamp': DateTime.now().toIso8601String(),
+          'loadTime': loadTime?.inMilliseconds,
+        });
+  }
+
+  void logUserAction(String action, {Map<String, dynamic>? data}) {
+    _logger.logApp('User action: $action',
+        data: {
+          'action': action,
+          'timestamp': DateTime.now().toIso8601String(),
+          ...?data,
+        });
+  }
+
+  // Error handling
+  void handleError(String message, {Object? error, StackTrace? stackTrace}) {
+    _setErrorMessage(message);
+    _logger.logError(message, error: error, stackTrace: stackTrace);
+  }
+
+  void clearError() {
+    _setErrorMessage(null);
+  }
+
+  // App lifecycle
+  void onAppResumed() {
+    _logger.logApp('App resumed');
+    // Check connectivity and server health when app resumes
+    checkServerHealth();
+  }
+
+  void onAppPaused() {
+    _logger.logApp('App paused');
+  }
+
+  void onAppDetached() {
+    _logger.logApp('App detached');
+  }
+
+  // Settings and configuration
+  String get apiBaseUrl => Constants.baseUrl;
+  Duration get healthCheckInterval => Constants.connectionCheckInterval;
+  int get maxRetryAttempts => Constants.maxRetryAttempts;
+
+  @override
+  void dispose() {
+    _logger.logApp('AppStateProvider disposed');
+    super.dispose();
+  }
+}
