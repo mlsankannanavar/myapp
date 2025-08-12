@@ -87,15 +87,15 @@
     },
     {
       "name": "camera",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/camera-0.10.6",
-      "packageUri": "lib/",
-      "languageVersion": "3.2"
-    },
-    {
-      "name": "camera_android",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/camera_android-0.10.10+5",
+      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/camera-0.11.2",
       "packageUri": "lib/",
       "languageVersion": "3.6"
+    },
+    {
+      "name": "camera_android_camerax",
+      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/camera_android_camerax-0.6.19+1",
+      "packageUri": "lib/",
+      "languageVersion": "3.7"
     },
     {
       "name": "camera_avfoundation",
@@ -147,15 +147,15 @@
     },
     {
       "name": "connectivity_plus",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/connectivity_plus-5.0.2",
+      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/connectivity_plus-6.1.5",
       "packageUri": "lib/",
-      "languageVersion": "2.18"
+      "languageVersion": "3.2"
     },
     {
       "name": "connectivity_plus_platform_interface",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/connectivity_plus_platform_interface-1.2.4",
+      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/connectivity_plus_platform_interface-2.0.1",
       "packageUri": "lib/",
-      "languageVersion": "2.12"
+      "languageVersion": "2.18"
     },
     {
       "name": "convert",
@@ -303,13 +303,13 @@
     },
     {
       "name": "google_mlkit_commons",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/google_mlkit_commons-0.5.0",
+      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/google_mlkit_commons-0.7.1",
       "packageUri": "lib/",
       "languageVersion": "2.16"
     },
     {
       "name": "google_mlkit_text_recognition",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/google_mlkit_text_recognition-0.10.0",
+      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/google_mlkit_text_recognition-0.13.1",
       "packageUri": "lib/",
       "languageVersion": "2.16"
     },
@@ -357,9 +357,9 @@
     },
     {
       "name": "intl",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/intl-0.18.1",
+      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/intl-0.19.0",
       "packageUri": "lib/",
-      "languageVersion": "2.12"
+      "languageVersion": "3.0"
     },
     {
       "name": "io",
@@ -369,9 +369,9 @@
     },
     {
       "name": "js",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/js-0.6.7",
+      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/js-0.7.2",
       "packageUri": "lib/",
-      "languageVersion": "2.19"
+      "languageVersion": "3.7"
     },
     {
       "name": "json_annotation",
@@ -441,15 +441,15 @@
     },
     {
       "name": "mime",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/mime-1.0.6",
+      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/mime-2.0.0",
       "packageUri": "lib/",
       "languageVersion": "3.2"
     },
     {
       "name": "mobile_scanner",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/mobile_scanner-3.5.7",
+      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/mobile_scanner-5.2.3",
       "packageUri": "lib/",
-      "languageVersion": "2.17"
+      "languageVersion": "3.4"
     },
     {
       "name": "nested",
@@ -590,12 +590,6 @@
       "languageVersion": "3.6"
     },
     {
-      "name": "qr_code_scanner",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/qr_code_scanner-1.0.1",
-      "packageUri": "lib/",
-      "languageVersion": "2.17"
-    },
-    {
       "name": "riverpod",
       "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/riverpod-2.6.1",
       "packageUri": "lib/",
@@ -603,13 +597,13 @@
     },
     {
       "name": "share_plus",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/share_plus-7.2.2",
+      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/share_plus-10.1.4",
       "packageUri": "lib/",
-      "languageVersion": "2.18"
+      "languageVersion": "3.4"
     },
     {
       "name": "share_plus_platform_interface",
-      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/share_plus_platform_interface-3.4.0",
+      "rootUri": "file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/share_plus_platform_interface-5.0.2",
       "packageUri": "lib/",
       "languageVersion": "2.18"
     },

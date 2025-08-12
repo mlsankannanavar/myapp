@@ -34,8 +34,8 @@ class ApiService {
 
     try {
       // Check network connectivity first
-      final connectivityResult = await Connectivity().checkConnectivity();
-      if (connectivityResult == ConnectivityResult.none) {
+      final connectivityResults = await Connectivity().checkConnectivity();
+      if (connectivityResults.contains(ConnectivityResult.none) || connectivityResults.isEmpty) {
         _logger.logNetwork('No network connectivity', level: LogLevel.error);
         throw const SocketException('No network connection');
       }
@@ -126,8 +126,8 @@ class ApiService {
       }
 
       // Check network connectivity
-      final connectivityResult = await Connectivity().checkConnectivity();
-      if (connectivityResult == ConnectivityResult.none) {
+      final connectivityResults = await Connectivity().checkConnectivity();
+      if (connectivityResults.contains(ConnectivityResult.none) || connectivityResults.isEmpty) {
         _logger.logNetwork('No network connectivity', level: LogLevel.error);
         throw const SocketException('No network connection');
       }

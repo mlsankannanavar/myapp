@@ -115,14 +115,14 @@ class AppStateProvider with ChangeNotifier {
   // Check network connectivity
   Future<void> _checkConnectivity() async {
     try {
-      final connectivityResult = await Connectivity().checkConnectivity();
+      final connectivityResults = await Connectivity().checkConnectivity();
       
-      if (connectivityResult == ConnectivityResult.none) {
+      if (connectivityResults.contains(ConnectivityResult.none) || connectivityResults.isEmpty) {
         _setConnectionStatus(ConnectionStatus.disconnected);
         _logger.logNetwork('No network connection', level: LogLevel.warning);
       } else {
         _logger.logNetwork('Network connection available',
-            data: {'type': connectivityResult.name});
+            data: {'types': connectivityResults.map((r) => r.name).toList()});
         // Don't automatically set to connected, wait for health check
       }
     } catch (e, stackTrace) {
@@ -133,10 +133,10 @@ class AppStateProvider with ChangeNotifier {
 
   // Listen to connectivity changes
   void _listenToConnectivityChanges() {
-    Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
-      _logger.logNetwork('Connectivity changed to ${result.name}');
+    Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
+      _logger.logNetwork('Connectivity changed to ${results.map((r) => r.name).join(', ')}');
       
-      if (result == ConnectivityResult.none) {
+      if (results.contains(ConnectivityResult.none) || results.isEmpty) {
         _setConnectionStatus(ConnectionStatus.disconnected);
       } else {
         // Check server health when connectivity is restored
