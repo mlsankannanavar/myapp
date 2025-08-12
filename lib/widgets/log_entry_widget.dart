@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../models/log_entry_model.dart';
 import '../utils/app_colors.dart';
 import '../utils/helpers.dart';
+import '../utils/log_level.dart';
 
 class LogEntryWidget extends StatefulWidget {
   final LogEntry logEntry;
@@ -504,6 +505,8 @@ class _LogEntryWidgetState extends State<LogEntryWidget>
         return AppColors.logWarning;
       case LogLevel.error:
         return AppColors.logError;
+      case LogLevel.fatal:
+        return AppColors.logError; // Use same color as error
       case LogLevel.debug:
         return AppColors.logDebug;
     }

@@ -1,6 +1,5 @@
 import 'package:uuid/uuid.dart';
-
-enum LogLevel { info, warning, error, success, debug }
+import '../utils/log_level.dart';
 
 class LogEntry {
   final String id;

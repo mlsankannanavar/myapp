@@ -654,11 +654,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       // Clear all data
-      await Future.wait([
-        batchProvider.clearAllBatches(),
-        loggingProvider.clearLogs(),
-        appStateProvider.resetSettings(),
-      ]);
+      await batchProvider.clearAllBatches();
+      loggingProvider.clearLogs();
+      appStateProvider.resetSettings();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

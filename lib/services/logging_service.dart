@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/log_entry_model.dart';
 import '../utils/constants.dart';
 import '../utils/helpers.dart';
+import '../utils/log_level.dart';
 
 class LoggingService extends ChangeNotifier {
   static final LoggingService _instance = LoggingService._internal();
@@ -136,12 +137,33 @@ class LoggingService extends ChangeNotifier {
   void logApp(String message, {
     LogLevel level = LogLevel.info,
     Map<String, dynamic>? data,
+    Map<String, dynamic>? additionalData,
   }) {
     log(LogEntry.app(
       message: message,
       level: level,
-      data: data,
+      data: data ?? additionalData,
     ));
+  }
+
+  // Alias methods for different naming conventions
+  void logQRScan(String message, {String? qrData, bool success = true}) {
+    logQrScan(message, qrData: qrData, success: success);
+  }
+
+  void logOCR(String message, {
+    String? extractedText,
+    double? confidence,
+    bool success = true,
+  }) {
+    logOcr(message, 
+        extractedText: extractedText, 
+        confidence: confidence, 
+        success: success);
+  }
+
+  void logWarning(String message, {Map<String, dynamic>? additionalData}) {
+    logApp(message, level: LogLevel.warning, additionalData: additionalData);
   }
 
   void logNetwork(String message, {

@@ -248,9 +248,10 @@ class _BatchListScreenState extends State<BatchListScreen>
           );
         }
 
-        if (batchProvider.error != null) {
+        if (batchProvider.errorMessage != null) {
           return CustomErrorWidget(
-            error: batchProvider.error!,
+            title: 'Error Loading Batches',
+            message: batchProvider.errorMessage!,
             onRetry: () => batchProvider.loadBatchHistory(),
           );
         }
@@ -293,8 +294,6 @@ class _BatchListScreenState extends State<BatchListScreen>
         return BatchCardWidget(
           batch: batches[index],
           onTap: () => _onBatchTapped(batches[index]),
-          onFavorite: () => _onBatchFavorited(batches[index]),
-          onShare: () => _onBatchShared(batches[index]),
         );
       },
     );
@@ -315,9 +314,7 @@ class _BatchListScreenState extends State<BatchListScreen>
         return BatchCardWidget(
           batch: batches[index],
           onTap: () => _onBatchTapped(batches[index]),
-          onFavorite: () => _onBatchFavorited(batches[index]),
-          onShare: () => _onBatchShared(batches[index]),
-          isCompact: true,
+          compact: true,
         );
       },
     );
@@ -513,29 +510,29 @@ class _BatchListScreenState extends State<BatchListScreen>
     // Apply search filter
     if (_searchQuery.isNotEmpty) {
       filtered = filtered.where((batch) {
-        return batch.batchNumber.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-               batch.productName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-               batch.manufacturer.toLowerCase().contains(_searchQuery.toLowerCase());
+        return (batch.batchNumber?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
+               (batch.productName?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
+               (batch.manufacturer?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
       }).toList();
     }
 
     // Apply status filter
     if (_selectedStatus != 'All') {
       filtered = filtered.where((batch) {
-        return batch.status.toLowerCase() == _selectedStatus.toLowerCase();
+        return batch.status?.toLowerCase() == _selectedStatus.toLowerCase();
       }).toList();
     }
 
     // Apply sorting
     switch (_sortBy) {
       case 'Name':
-        filtered.sort((a, b) => a.productName.compareTo(b.productName));
+        filtered.sort((a, b) => (a.productName ?? '').compareTo(b.productName ?? ''));
         break;
       case 'Batch Number':
-        filtered.sort((a, b) => a.batchNumber.compareTo(b.batchNumber));
+        filtered.sort((a, b) => (a.batchNumber ?? '').compareTo(b.batchNumber ?? ''));
         break;
       case 'Expiry Date':
-        filtered.sort((a, b) => a.expiryDate.compareTo(b.expiryDate));
+        filtered.sort((a, b) => (a.expiryDate ?? '').compareTo(b.expiryDate ?? ''));
         break;
       case 'Recent':
       default:
@@ -684,8 +681,8 @@ class _BatchListScreenState extends State<BatchListScreen>
               _buildDetailRow('Product', batch.productName),
               _buildDetailRow('Manufacturer', batch.manufacturer),
               _buildDetailRow('Batch Number', batch.batchNumber),
-              _buildDetailRow('Manufacturing Date', Helpers.formatDate(batch.manufacturingDate)),
-              _buildDetailRow('Expiry Date', Helpers.formatDate(batch.expiryDate)),
+              _buildDetailRow('Manufacturing Date', batch.manufacturingDate),
+              _buildDetailRow('Expiry Date', batch.expiryDate),
               _buildDetailRow('Status', batch.status),
               _buildDetailRow('Scanned', Helpers.formatDateTime(batch.scannedAt)),
             ],
@@ -708,7 +705,7 @@ class _BatchListScreenState extends State<BatchListScreen>
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(String label, String? value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -726,7 +723,7 @@ class _BatchListScreenState extends State<BatchListScreen>
           ),
           Expanded(
             child: Text(
-              value,
+              value ?? 'N/A',
               style: const TextStyle(fontSize: 12),
             ),
           ),

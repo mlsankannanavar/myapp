@@ -5,6 +5,7 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 import 'package:permission_handler/permission_handler.dart';
 import '../utils/constants.dart';
 import '../utils/helpers.dart';
+import '../utils/log_level.dart';
 import 'logging_service.dart';
 
 class OcrService extends ChangeNotifier {
@@ -19,6 +20,7 @@ class OcrService extends ChangeNotifier {
   List<CameraDescription>? _cameras;
   bool _isInitialized = false;
   bool _isProcessing = false;
+  bool _isFlashlightOn = false;
   String? _lastExtractedText;
   double? _lastConfidence;
   DateTime? _lastProcessTime;
@@ -361,11 +363,12 @@ class OcrService extends ChangeNotifier {
     }
 
     try {
-      final currentMode = await _cameraController!.getFlashMode();
-      final newMode = currentMode == FlashMode.off ? FlashMode.torch : FlashMode.off;
-      
+      // Toggle flashlight (CameraController doesn't have getFlashMode, so we'll track it ourselves)
+      final newMode = _isFlashlightOn ? FlashMode.off : FlashMode.torch;
       await _cameraController!.setFlashMode(newMode);
-      _logger.logOcr('Flashlight ${newMode == FlashMode.torch ? 'enabled' : 'disabled'}');
+      _isFlashlightOn = !_isFlashlightOn;
+      
+      _logger.logOcr('Flashlight ${_isFlashlightOn ? 'enabled' : 'disabled'}');
       notifyListeners();
     } catch (e, stackTrace) {
       _logger.logError('Failed to toggle flashlight',

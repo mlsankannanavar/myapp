@@ -1,14 +1,16 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/api_service.dart';
 import '../services/logging_service.dart';
 import '../models/health_response_model.dart';
+import '../models/log_entry_model.dart';
 import '../utils/constants.dart';
+import '../utils/log_level.dart';
 
 enum AppStatus { initializing, ready, error }
 enum ConnectionStatus { connected, disconnected, checking }
 
-class AppStateProvider extends ChangeNotifier {
+class AppStateProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
   final LoggingService _logger = LoggingService();
   
@@ -277,6 +279,75 @@ class AppStateProvider extends ChangeNotifier {
   String get apiBaseUrl => Constants.baseUrl;
   Duration get healthCheckInterval => Constants.connectionCheckInterval;
   int get maxRetryAttempts => Constants.maxRetryAttempts;
+
+  // Public initialization method
+  Future<void> initialize() async {
+    await _initializeApp();
+  }
+
+  // API health status
+  bool get isApiHealthy => _connectionStatus == ConnectionStatus.connected;
+  
+  // Set API health status
+  void setApiHealthy(bool healthy) {
+    _setConnectionStatus(healthy ? ConnectionStatus.connected : ConnectionStatus.disconnected);
+  }
+
+  // Loading state
+  bool get isLoading => _appStatus == AppStatus.initializing;
+
+  // UI Settings
+  bool _isDarkMode = false;
+  bool _isAutoRefreshEnabled = true;
+  bool _isAutoScanEnabled = false;
+  bool _isVibrateEnabled = true;
+  bool _isBeepEnabled = true;
+
+  bool get isDarkMode => _isDarkMode;
+  bool get isAutoRefreshEnabled => _isAutoRefreshEnabled;
+  bool get isAutoScanEnabled => _isAutoScanEnabled;
+  bool get isVibrateEnabled => _isVibrateEnabled;
+  bool get isBeepEnabled => _isBeepEnabled;
+
+  void setDarkMode(bool value) {
+    _isDarkMode = value;
+    notifyListeners();
+  }
+
+  void setAutoRefresh(bool value) {
+    _isAutoRefreshEnabled = value;
+    notifyListeners();
+  }
+
+  void setAutoScan(bool value) {
+    _isAutoScanEnabled = value;
+    notifyListeners();
+  }
+
+  void setVibrate(bool value) {
+    _isVibrateEnabled = value;
+    notifyListeners();
+  }
+
+  void setBeep(bool value) {
+    _isBeepEnabled = value;
+    notifyListeners();
+  }
+
+  // Reset all settings to defaults
+  void resetSettings() {
+    _isDarkMode = false;
+    _isAutoRefreshEnabled = true;
+    _isAutoScanEnabled = false;
+    _isVibrateEnabled = true;
+    _isBeepEnabled = true;
+    notifyListeners();
+  }
+
+  // Check API health manually
+  Future<void> checkApiHealth() async {
+    await checkServerHealth();
+  }
 
   @override
   void dispose() {

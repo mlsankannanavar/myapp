@@ -6,6 +6,7 @@ import '../widgets/log_entry_widget.dart';
 import '../widgets/loading_widget.dart';
 import '../utils/app_colors.dart';
 import '../utils/helpers.dart';
+import '../utils/log_level.dart';
 
 class LogViewerScreen extends StatefulWidget {
   final ScrollController? scrollController;
@@ -168,7 +169,28 @@ class _LogViewerScreenState extends State<LogViewerScreen>
             ),
           ),
           
-          if (_showSearch) _buildSearchBar(),
+          if (_showSearch) 
+            Container(
+              padding: const EdgeInsets.all(8),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search logs...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          onPressed: _clearSearch,
+                          icon: const Icon(Icons.clear),
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+                onChanged: _onSearchChanged,
+              ),
+            ),
           
           // Filter chips
           _buildFilterChips(),
@@ -638,6 +660,8 @@ class _LogViewerScreenState extends State<LogViewerScreen>
         return AppColors.logWarning;
       case LogLevel.error:
         return AppColors.logError;
+      case LogLevel.fatal:
+        return AppColors.logError; // Use same color as error
       case LogLevel.debug:
         return AppColors.logDebug;
     }

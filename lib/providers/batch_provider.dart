@@ -1,10 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../models/batch_model.dart';
-import '../models/api_response_model.dart';
+import '../models/log_entry_model.dart';
 import '../services/api_service.dart';
 import '../services/logging_service.dart';
 import '../utils/constants.dart';
+import '../utils/log_level.dart';
 
 enum BatchLoadingState { idle, loading, loaded, error }
 
@@ -68,72 +70,10 @@ class BatchProvider extends ChangeNotifier {
     }
   }
 
-  // Load batches for a session
-  Future<void> loadBatches(String sessionId, {bool forceRefresh = false}) async {
-    if (_currentSessionId == sessionId && !forceRefresh && _batches.isNotEmpty) {
-      _logger.logApp('Using cached batches for session',
-          data: {'sessionId': sessionId, 'count': _batches.length});
-      return;
-    }
-
-    _setLoadingState(BatchLoadingState.loading);
-    _currentSessionId = sessionId;
-    _clearError();
-
-    final stopwatch = Stopwatch()..start();
-    
-    try {
-      _logger.logApp('Loading batches for session',
-          data: {'sessionId': sessionId, 'forceRefresh': forceRefresh});
-
-      final response = await _apiService.getFilteredBatches(sessionId);
-      stopwatch.stop();
-      
-      _lastLoadDuration = stopwatch.elapsed;
-      _lastLoadTime = DateTime.now();
-
-      if (response.isSuccess && response.data != null) {
-        _batches = response.data!;
-        await _cacheBatches();
-        _setLoadingState(BatchLoadingState.loaded);
-        
-        _logger.logApp('Batches loaded successfully',
-            level: LogLevel.success,
-            data: {
-              'sessionId': sessionId,
-              'batchCount': _batches.length,
-              'duration': stopwatch.elapsed.inMilliseconds,
-              'expiredCount': expiredBatches.length,
-              'expiringSoonCount': batchesExpiringSoon.length,
-            });
-      } else {
-        _setError(response.error ?? 'Failed to load batches');
-        _setLoadingState(BatchLoadingState.error);
-        
-        _logger.logApp('Failed to load batches',
-            level: LogLevel.error,
-            data: {
-              'sessionId': sessionId,
-              'error': response.error,
-              'statusCode': response.statusCode,
-              'duration': stopwatch.elapsed.inMilliseconds,
-            });
-      }
-    } catch (e, stackTrace) {
-      stopwatch.stop();
-      _lastLoadDuration = stopwatch.elapsed;
-      _setError('Unexpected error: ${e.toString()}');
-      _setLoadingState(BatchLoadingState.error);
-      
-      _logger.logError('Exception while loading batches',
-          error: e, stackTrace: stackTrace);
-    }
-  }
-
   // Retry loading batches
   Future<void> retryLoadBatches() async {
     if (_currentSessionId != null) {
-      await loadBatches(_currentSessionId!, forceRefresh: true);
+      await loadBatchesForSession(_currentSessionId!, forceRefresh: true);
     } else {
       _logger.logApp('Cannot retry batch loading - no session ID',
           level: LogLevel.warning);
@@ -143,7 +83,7 @@ class BatchProvider extends ChangeNotifier {
   // Refresh batches for current session
   Future<void> refreshBatches() async {
     if (_currentSessionId != null) {
-      await loadBatches(_currentSessionId!, forceRefresh: true);
+      await loadBatchesForSession(_currentSessionId!, forceRefresh: true);
     } else {
       _logger.logApp('Cannot refresh batches - no current session',
           level: LogLevel.warning);
@@ -307,11 +247,9 @@ class BatchProvider extends ChangeNotifier {
     }
   }
 
-  void _setError(String error) {
-    _errorMessage = error;
-    _logger.logApp('Batch provider error set',
-        level: LogLevel.error,
-        data: {'error': error});
+  void _setErrorMessage(String? message) {
+    _errorMessage = message;
+    notifyListeners();
   }
 
   void _clearError() {
@@ -346,6 +284,366 @@ class BatchProvider extends ChangeNotifier {
         data: {
           'operation': operation,
           'duration': duration.inMilliseconds,
+          'batchCount': _batches.length,
+          'sessionId': _currentSessionId,
+          ...?additionalData,
+        });
+  }
+
+  // Additional getters for filtered data
+  List<BatchModel> get allBatches => batches;
+  
+  List<BatchModel> get recentBatches {
+    final sorted = _batches.toList()
+      ..sort((a, b) => b.scannedAt.compareTo(a.scannedAt));
+    return sorted.take(10).toList();
+  }
+  
+  List<BatchModel> get favoriteBatches => 
+    _batches.where((batch) => batch.isFavorite).toList();
+  
+  int get totalScannedBatches => _batches.length;
+
+  // Load batch history (alias for loadBatches)
+  Future<void> loadBatchHistory() async {
+    await loadBatches();
+  }
+
+  // Toggle favorite status
+  Future<void> toggleFavorite(String batchId) async {
+    try {
+      final batchIndex = _batches.indexWhere((batch) => batch.id == batchId);
+      if (batchIndex != -1) {
+        final batch = _batches[batchIndex];
+        final updatedBatch = BatchModel(
+          id: batch.id,
+          batchId: batch.batchId,
+          sessionId: batch.sessionId,
+          productName: batch.productName,
+          manufacturingDate: batch.manufacturingDate,
+          expiryDate: batch.expiryDate,
+          batchNumber: batch.batchNumber,
+          lotNumber: batch.lotNumber,
+          manufacturer: batch.manufacturer,
+          status: batch.status,
+          isFavorite: !batch.isFavorite,
+          scannedAt: batch.scannedAt,
+          additionalInfo: batch.additionalInfo,
+          createdAt: batch.createdAt,
+          updatedAt: DateTime.now(),
+        );
+        
+        _batches[batchIndex] = updatedBatch;
+        await _saveBatchToLocal(updatedBatch);
+        notifyListeners();
+        
+        _logOperation('Toggled favorite status', 
+          level: LogLevel.info,
+          additionalData: {
+            'batchId': batchId,
+            'isFavorite': updatedBatch.isFavorite,
+          });
+      }
+    } catch (e) {
+      _logger.logError('Failed to toggle favorite', error: e);
+    }
+  }
+
+  // Process batch from QR scan
+  Future<void> processBatch(String qrData) async {
+    try {
+      _logger.logQRScan('Processing QR data: $qrData');
+      
+      // Try to parse as JSON first
+      Map<String, dynamic>? jsonData;
+      try {
+        jsonData = Map<String, dynamic>.from(
+          const JsonDecoder().convert(qrData)
+        );
+      } catch (e) {
+        // If not JSON, treat as simple batch ID
+        jsonData = {'batch_id': qrData};
+      }
+      
+      final sessionId = _currentSessionId ?? _generateSessionId();
+      if (_currentSessionId == null) {
+        _currentSessionId = sessionId;
+      }
+      
+      final batch = BatchModel.fromJson(jsonData, sessionId);
+      await addBatch(batch);
+      
+    } catch (e) {
+      _logger.logError('Failed to process QR batch', error: e);
+      rethrow;
+    }
+  }
+
+  // Create batch from OCR data
+  Future<void> createBatchFromOCR(String extractedText, List<String> extractedLines) async {
+    try {
+      _logger.logOCR('Creating batch from OCR data');
+      
+      // Parse OCR data to extract batch information
+      final batchData = _parseOCRData(extractedText, extractedLines);
+      
+      final sessionId = _currentSessionId ?? _generateSessionId();
+      if (_currentSessionId == null) {
+        _currentSessionId = sessionId;
+      }
+      
+      final batch = BatchModel.fromJson(batchData, sessionId);
+      await addBatch(batch);
+      
+    } catch (e) {
+      _logger.logError('Failed to create batch from OCR', error: e);
+      rethrow;
+    }
+  }
+
+  // Parse OCR data to extract batch information
+  Map<String, dynamic> _parseOCRData(String text, List<String> lines) {
+    final data = <String, dynamic>{};
+    
+    for (final line in lines) {
+      final normalizedLine = line.toLowerCase().trim();
+      
+      // Extract batch number
+      if (normalizedLine.contains('batch') || normalizedLine.contains('lot')) {
+        final batchMatch = RegExp(r'(?:batch|lot)\s*[:#]?\s*([a-zA-Z0-9\-_]+)', 
+          caseSensitive: false).firstMatch(line);
+        if (batchMatch != null) {
+          data['batch_id'] = batchMatch.group(1);
+          data['batch_number'] = batchMatch.group(1);
+        }
+      }
+      
+      // Extract product name
+      if (normalizedLine.contains('product') || normalizedLine.contains('name')) {
+        final productMatch = RegExp(r'(?:product|name)\s*[:#]?\s*(.+)', 
+          caseSensitive: false).firstMatch(line);
+        if (productMatch != null) {
+          data['product_name'] = productMatch.group(1)?.trim();
+        }
+      }
+      
+      // Extract manufacturing date
+      if (normalizedLine.contains('mfg') || normalizedLine.contains('manufactured')) {
+        final dateMatch = RegExp(r'(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})', 
+          caseSensitive: false).firstMatch(line);
+        if (dateMatch != null) {
+          data['manufacturing_date'] = dateMatch.group(1);
+        }
+      }
+      
+      // Extract expiry date
+      if (normalizedLine.contains('exp') || normalizedLine.contains('expiry')) {
+        final dateMatch = RegExp(r'(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})', 
+          caseSensitive: false).firstMatch(line);
+        if (dateMatch != null) {
+          data['expiry_date'] = dateMatch.group(1);
+        }
+      }
+      
+      // Extract manufacturer
+      if (normalizedLine.contains('manufacturer') || normalizedLine.contains('company')) {
+        final mfgMatch = RegExp(r'(?:manufacturer|company)\s*[:#]?\s*(.+)', 
+          caseSensitive: false).firstMatch(line);
+        if (mfgMatch != null) {
+          data['manufacturer'] = mfgMatch.group(1)?.trim();
+        }
+      }
+    }
+    
+    // If no batch ID found, generate one
+    if (data['batch_id'] == null) {
+      data['batch_id'] = 'OCR_${DateTime.now().millisecondsSinceEpoch}';
+    }
+    
+    return data;
+  }
+
+  // Export batch data
+  Future<void> exportBatchData() async {
+    try {
+      _logger.logApp('Exporting batch data');
+      
+      // Create CSV content
+      final csvContent = StringBuffer();
+      csvContent.writeln('ID,Batch ID,Product Name,Manufacturing Date,Expiry Date,Status,Scanned At');
+      
+      for (final batch in _batches) {
+        csvContent.writeln([
+          batch.id,
+          batch.batchId,
+          batch.productName ?? '',
+          batch.manufacturingDate ?? '',
+          batch.expiryDate ?? '',
+          batch.status ?? '',
+          batch.scannedAt.toIso8601String(),
+        ].map((field) => '"$field"').join(','));
+      }
+      
+      // You would typically save this to a file or share it
+      // For now, just log it
+      _logger.logApp('Batch data exported successfully', 
+        level: LogLevel.success,
+        additionalData: {
+          'batchCount': _batches.length,
+          'csvLength': csvContent.length,
+        });
+        
+    } catch (e) {
+      _logger.logError('Failed to export batch data', error: e);
+      rethrow;
+    }
+  }
+
+  // Clear all batches
+  Future<void> clearAllBatches() async {
+    try {
+      _batches.clear();
+      await _batchBox?.clear();
+      notifyListeners();
+      
+      _logger.logApp('All batches cleared', level: LogLevel.warning);
+    } catch (e) {
+      _logger.logError('Failed to clear batches', error: e);
+      rethrow;
+    }
+  }
+
+  // Auto backup settings
+  bool _isAutoBackupEnabled = false;
+  bool get isAutoBackupEnabled => _isAutoBackupEnabled;
+  
+  void setAutoBackup(bool enabled) {
+    _isAutoBackupEnabled = enabled;
+    notifyListeners();
+  }
+
+  // Load batches method that takes no parameters (for compatibility)
+  Future<void> loadBatches() async {
+    final sessionId = _currentSessionId ?? _generateSessionId();
+    if (_currentSessionId == null) {
+      _currentSessionId = sessionId;
+    }
+    await loadBatchesForSession(sessionId);
+  }
+
+  // Renamed original method to avoid conflict
+  Future<void> loadBatchesForSession(String sessionId, {bool forceRefresh = false}) async {
+    if (_currentSessionId == sessionId && !forceRefresh && _batches.isNotEmpty) {
+      _logger.logApp('Using cached batches for session',
+          additionalData: {'sessionId': sessionId, 'count': _batches.length});
+      return;
+    }
+
+    _setLoadingState(BatchLoadingState.loading);
+    _currentSessionId = sessionId;
+
+    try {
+      final stopwatch = Stopwatch()..start();
+
+      // Load from API
+      final response = await _apiService.getBatches(sessionId);
+      stopwatch.stop();
+
+      if (response.isSuccess && response.data != null) {
+        _batches = response.data!;
+        _lastLoadTime = DateTime.now();
+        _lastLoadDuration = stopwatch.elapsed;
+
+        // Save to local storage
+        await _saveBatchesToLocal();
+
+        _setLoadingState(BatchLoadingState.loaded);
+        _logger.logApp('Batches loaded successfully from API',
+            additionalData: {
+              'sessionId': sessionId,
+              'count': _batches.length,
+              'duration': stopwatch.elapsed.inMilliseconds,
+            });
+      } else {
+        // Fallback to cached data
+        await _loadCachedBatches();
+        _setErrorMessage(response.message ?? 'Failed to load batches');
+        _setLoadingState(BatchLoadingState.error);
+        
+        _logger.logWarning('Failed to load batches from API, using cached data',
+            additionalData: {
+              'sessionId': sessionId,
+              'cachedCount': _batches.length,
+              'error': response.message,
+            });
+      }
+    } catch (e, stackTrace) {
+      await _loadCachedBatches();
+      _setErrorMessage(e.toString());
+      _setLoadingState(BatchLoadingState.error);
+      
+      _logger.logError('Exception while loading batches',
+          error: e,
+          stackTrace: stackTrace);
+    }
+
+    notifyListeners();
+  }
+
+  // Generate session ID
+  String _generateSessionId() {
+    return 'session_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  // Add batch method
+  Future<void> addBatch(BatchModel batch) async {
+    try {
+      _batches.add(batch);
+      await _saveBatchToLocal(batch);
+      notifyListeners();
+      
+      _logOperation('Batch added successfully',
+          level: LogLevel.success,
+          additionalData: {
+            'batchId': batch.id,
+            'sessionId': batch.sessionId,
+          });
+    } catch (e) {
+      _logger.logError('Failed to add batch', error: e);
+      rethrow;
+    }
+  }
+
+  // Save batch to local storage
+  Future<void> _saveBatchToLocal(BatchModel batch) async {
+    try {
+      await _batchBox?.put(batch.id, batch.toMap());
+    } catch (e) {
+      _logger.logError('Failed to save batch to local storage', error: e);
+    }
+  }
+
+  // Save all batches to local storage
+  Future<void> _saveBatchesToLocal() async {
+    try {
+      if (_batchBox != null) {
+        for (final batch in _batches) {
+          await _batchBox!.put(batch.id, batch.toMap());
+        }
+      }
+    } catch (e) {
+      _logger.logError('Failed to save batches to local storage', error: e);
+    }
+  }
+
+  // Log operation helper
+  void _logOperation(String message, {
+    LogLevel level = LogLevel.info,
+    Map<String, dynamic>? additionalData,
+  }) {
+    _logger.logApp(message,
+        level: level,
+        additionalData: {
           'batchCount': _batches.length,
           'sessionId': _currentSessionId,
           ...?additionalData,

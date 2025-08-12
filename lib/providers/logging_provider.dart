@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/log_entry_model.dart';
 import '../services/logging_service.dart';
+import '../utils/log_level.dart';
 
 class LoggingProvider extends ChangeNotifier {
   final LoggingService _loggingService = LoggingService();
@@ -227,6 +228,55 @@ class LoggingProvider extends ChangeNotifier {
 
   int get maxLogs => _loggingService.maxLogs;
   bool get enableLogging => _loggingService.enableLogging;
+
+  // Additional logging methods with different capitalizations for compatibility
+  void logSuccess(String message, {Map<String, dynamic>? data}) {
+    _loggingService.logApp(message, level: LogLevel.success, additionalData: data);
+  }
+
+  void logWarning(String message, {Map<String, dynamic>? data}) {
+    _loggingService.logApp(message, level: LogLevel.warning, additionalData: data);
+  }
+
+  void logOCR(String message, {String? extractedText, bool success = true}) {
+    _loggingService.logOcr(message, extractedText: extractedText, success: success);
+  }
+
+  void logQRScan(String message, {String? qrData, bool success = true}) {
+    _loggingService.logQrScan(message, qrData: qrData, success: success);
+  }
+
+  // Statistics methods
+  int getTodayLogsCount() {
+    final today = DateTime.now();
+    final startOfDay = DateTime(today.year, today.month, today.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+    return getLogsByTimeRange(startOfDay, endOfDay).length;
+  }
+
+  int getErrorLogsCount() {
+    return logs.where((log) => log.level == LogLevel.error || log.level == LogLevel.fatal).length;
+  }
+
+  // Settings getters/setters
+  bool _isDetailedLoggingEnabled = true;
+  bool _isAutoExportEnabled = false;
+  int _logRetentionDays = 30;
+
+  bool get isDetailedLoggingEnabled => _isDetailedLoggingEnabled;
+  bool get isAutoExportEnabled => _isAutoExportEnabled;
+  int get logRetentionDays => _logRetentionDays;
+  int get totalLogsCount => logs.length;
+
+  void setDetailedLogging(bool enabled) {
+    _isDetailedLoggingEnabled = enabled;
+    notifyListeners();
+  }
+
+  void setAutoExport(bool enabled) {
+    _isAutoExportEnabled = enabled;
+    notifyListeners();
+  }
 
   @override
   void dispose() {

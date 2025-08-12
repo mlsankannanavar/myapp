@@ -1,58 +1,82 @@
 class BatchModel {
+  final String id;
   final String batchId;
   final String sessionId;
   final String? productName;
   final String? manufacturingDate;
   final String? expiryDate;
+  final String? batchNumber;
   final String? lotNumber;
   final String? manufacturer;
+  final String? status;
+  final bool isFavorite;
+  final DateTime scannedAt;
   final Map<String, dynamic>? additionalInfo;
   final DateTime createdAt;
   final DateTime? updatedAt;
 
   BatchModel({
+    String? id,
     required this.batchId,
     required this.sessionId,
     this.productName,
     this.manufacturingDate,
     this.expiryDate,
+    this.batchNumber,
     this.lotNumber,
     this.manufacturer,
+    this.status = 'Active',
+    this.isFavorite = false,
+    DateTime? scannedAt,
     this.additionalInfo,
     DateTime? createdAt,
     this.updatedAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+  }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+       scannedAt = scannedAt ?? DateTime.now(),
+       createdAt = createdAt ?? DateTime.now();
 
   // Factory constructor from JSON
   factory BatchModel.fromJson(Map<String, dynamic> json, String sessionId) {
     return BatchModel(
+      id: json['id']?.toString(),
       batchId: json['batch_id']?.toString() ?? '',
       sessionId: sessionId,
       productName: json['product_name']?.toString(),
       manufacturingDate: json['manufacturing_date']?.toString(),
       expiryDate: json['expiry_date']?.toString(),
+      batchNumber: json['batch_number']?.toString() ?? json['batch_id']?.toString(),
       lotNumber: json['lot_number']?.toString(),
       manufacturer: json['manufacturer']?.toString(),
+      status: json['status']?.toString() ?? 'Active',
+      isFavorite: json['is_favorite'] as bool? ?? false,
+      scannedAt: json['scanned_at'] != null 
+        ? DateTime.tryParse(json['scanned_at'].toString()) ?? DateTime.now()
+        : DateTime.now(),
       additionalInfo: json['additional_info'] as Map<String, dynamic>?,
       createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at']) 
-          : DateTime.now(),
+        ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+        : DateTime.now(),
       updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at']) 
-          : null,
+        ? DateTime.tryParse(json['updated_at'].toString())
+        : null,
     );
   }
 
   // Convert to JSON
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'batch_id': batchId,
       'session_id': sessionId,
       'product_name': productName,
       'manufacturing_date': manufacturingDate,
       'expiry_date': expiryDate,
+      'batch_number': batchNumber,
       'lot_number': lotNumber,
       'manufacturer': manufacturer,
+      'status': status,
+      'is_favorite': isFavorite,
+      'scanned_at': scannedAt.toIso8601String(),
       'additional_info': additionalInfo,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
@@ -62,13 +86,18 @@ class BatchModel {
   // Convert to Map for local storage
   Map<String, dynamic> toMap() {
     return {
+      'id': id,
       'batchId': batchId,
       'sessionId': sessionId,
       'productName': productName,
       'manufacturingDate': manufacturingDate,
       'expiryDate': expiryDate,
+      'batchNumber': batchNumber,
       'lotNumber': lotNumber,
       'manufacturer': manufacturer,
+      'status': status,
+      'isFavorite': isFavorite,
+      'scannedAt': scannedAt.millisecondsSinceEpoch,
       'additionalInfo': additionalInfo,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'updatedAt': updatedAt?.millisecondsSinceEpoch,
@@ -78,13 +107,18 @@ class BatchModel {
   // Factory constructor from Map (local storage)
   factory BatchModel.fromMap(Map<String, dynamic> map) {
     return BatchModel(
+      id: map['id'],
       batchId: map['batchId'] ?? '',
       sessionId: map['sessionId'] ?? '',
       productName: map['productName'],
       manufacturingDate: map['manufacturingDate'],
       expiryDate: map['expiryDate'],
+      batchNumber: map['batchNumber'],
       lotNumber: map['lotNumber'],
       manufacturer: map['manufacturer'],
+      status: map['status'] ?? 'Active',
+      isFavorite: map['isFavorite'] ?? false,
+      scannedAt: DateTime.fromMillisecondsSinceEpoch(map['scannedAt'] ?? DateTime.now().millisecondsSinceEpoch),
       additionalInfo: map['additionalInfo'] != null 
           ? Map<String, dynamic>.from(map['additionalInfo']) 
           : null,

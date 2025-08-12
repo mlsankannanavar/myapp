@@ -7,6 +7,7 @@ import '../models/health_response_model.dart';
 import '../models/batch_model.dart';
 import '../utils/constants.dart';
 import '../utils/helpers.dart';
+import '../utils/log_level.dart';
 import 'logging_service.dart';
 
 class ApiService {
@@ -427,6 +428,17 @@ class ApiService {
     return BatchListResponse(
       success: false,
       error: 'Failed to load batches after $maxRetries attempts',
+    );
+  }
+
+  // Alias for getFilteredBatches for compatibility
+  Future<ApiResponse<List<BatchModel>>> getBatches(String sessionId) async {
+    final response = await getFilteredBatches(sessionId);
+    return ApiResponse<List<BatchModel>>(
+      success: response.success,
+      data: response.batches,
+      message: response.error,
+      statusCode: response.success ? 200 : 500,
     );
   }
 

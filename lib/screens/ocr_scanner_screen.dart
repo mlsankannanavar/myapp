@@ -3,7 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
 import '../providers/logging_provider.dart';
 import '../providers/batch_provider.dart';
-import '../services/ocr_service.dart';
+import '../services/ocr_service_new.dart';
 import '../widgets/loading_widget.dart';
 import '../widgets/error_widget.dart';
 import '../utils/app_colors.dart';
@@ -19,7 +19,7 @@ class OCRScannerScreen extends StatefulWidget {
 class _OCRScannerScreenState extends State<OCRScannerScreen>
     with WidgetsBindingObserver {
   CameraController? _cameraController;
-  OCRService? _ocrService;
+  OCRService _ocrService = OCRService();
   
   bool _isCameraInitialized = false;
   bool _isProcessing = false;
@@ -236,7 +236,6 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
       child: const Center(
         child: LoadingWidget(
           message: 'Processing image...',
-          color: Colors.white,
         ),
       ),
     );
@@ -591,12 +590,12 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
         _isProcessing = true;
       });
 
-      loggingProvider.logOCR('Starting OCR processing', data: {'imagePath': imagePath});
+      loggingProvider.logOCR('Starting OCR processing');
 
-      final result = await _ocrService!.extractTextFromImage(imagePath);
+      final result = await _ocrService!.processImage(imagePath);
 
-      if (result.isSuccess) {
-        final extractedText = result.data as String;
+      if (result != null && result.isNotEmpty) {
+        final extractedText = result;
         
         setState(() {
           _extractedText = extractedText;
@@ -608,7 +607,7 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
           'linesFound': _extractedLines.length,
         });
       } else {
-        loggingProvider.logError('OCR processing failed: ${result.error}');
+        loggingProvider.logError('OCR processing failed: No text extracted');
         setState(() {
           _extractedText = '';
           _extractedLines = [];

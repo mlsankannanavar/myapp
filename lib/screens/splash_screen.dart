@@ -4,6 +4,8 @@ import '../providers/app_state_provider.dart';
 import '../providers/logging_provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/constants.dart';
+import '../utils/log_level.dart';
+import '../models/log_entry_model.dart';
 import 'home_screen.dart';
 
 class SplashScreen extends StatefulWidget {

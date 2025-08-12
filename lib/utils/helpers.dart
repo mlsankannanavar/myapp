@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class Helpers {
@@ -12,6 +13,11 @@ class Helpers {
   
   static String formatDateOnly(DateTime dateTime) {
     return DateFormat('yyyy-MM-dd').format(dateTime);
+  }
+  
+  // Alias for formatDateOnly for compatibility
+  static String formatDate(DateTime dateTime) {
+    return formatDateOnly(dateTime);
   }
   
   static String formatForExport(DateTime dateTime) {

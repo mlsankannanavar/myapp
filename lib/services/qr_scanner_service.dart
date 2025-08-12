@@ -3,6 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../utils/constants.dart';
 import '../utils/helpers.dart';
+import '../utils/log_level.dart';
 import 'logging_service.dart';
 
 class QrScannerService extends ChangeNotifier {

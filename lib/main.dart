@@ -6,7 +6,6 @@ import 'providers/batch_provider.dart';
 import 'providers/logging_provider.dart';
 import 'screens/splash_screen.dart';
 import 'utils/app_colors.dart';
-import 'utils/constants.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,7 +41,7 @@ class BatchMateApp extends StatelessWidget {
             elevation: 0,
             surfaceTintColor: Colors.transparent,
           ),
-          cardTheme: CardTheme(
+          cardTheme: CardThemeData(
             elevation: 2,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),

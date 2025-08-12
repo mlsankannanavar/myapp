@@ -14,7 +14,7 @@ class AppColors {
   // Log level colors
   static const Color logInfo = Color(0xFF2196F3);
   static const Color logSuccess = Color(0xFF4CAF50);
-  static const Color logWarning = Color(0xFF FF9800);
+  static const Color logWarning = Color(0xFFFF9800);
   static const Color logError = Color(0xFFF44336);
   static const Color logDebug = Color(0xFF9C27B0);
   

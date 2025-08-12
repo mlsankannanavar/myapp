@@ -3,7 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import '../providers/batch_provider.dart';
 import '../providers/logging_provider.dart';
-import '../services/qr_scanner_service.dart';
+import '../services/qr_scanner_service_new.dart';
 import '../widgets/loading_widget.dart';
 import '../widgets/error_widget.dart';
 import '../utils/app_colors.dart';
@@ -18,7 +18,7 @@ class QRScannerScreen extends StatefulWidget {
 class _QRScannerScreenState extends State<QRScannerScreen>
     with SingleTickerProviderStateMixin {
   late MobileScannerController _scannerController;
-  late QRScannerService _qrScannerService;
+  QRScannerService _qrScannerService = QRScannerService();
   late AnimationController _animationController;
   late Animation<double> _scanLineAnimation;
   
@@ -136,7 +136,8 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           onDetect: _onQRCodeDetected,
           errorBuilder: (context, error, child) {
             return CustomErrorWidget(
-              error: 'Scanner Error: ${error.errorCode}',
+              title: 'Scanner Error',
+              message: 'Error: ${error.errorCode}',
               onRetry: _restartScanner,
             );
           },
@@ -277,7 +278,6 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       child: const Center(
         child: LoadingWidget(
           message: 'Processing QR code...',
-          color: Colors.white,
         ),
       ),
     );
@@ -400,26 +400,15 @@ class _QRScannerScreenState extends State<QRScannerScreen>
     final batchProvider = Provider.of<BatchProvider>(context, listen: false);
 
     try {
-      loggingProvider.logQRScan('QR code detected', data: {
-        'qrCode': qrCode,
-        'format': barcode.format.name,
-      });
+      loggingProvider.logQRScan('QR code detected', qrData: qrCode);
 
-      // Process the QR code
-      final result = await _qrScannerService.processQRCode(qrCode);
-
-      if (result.isSuccess) {
-        loggingProvider.logSuccess('QR code processed successfully');
-        
-        // Add to batch history
-        await batchProvider.processBatch(result.data!);
-        
-        // Show success dialog
-        _showSuccessDialog(result.data!);
-      } else {
-        loggingProvider.logError('QR code processing failed: ${result.error}');
-        _showErrorDialog(result.error!);
-      }
+      // Process the QR code directly
+      await batchProvider.processBatch(qrCode);
+      
+      loggingProvider.logSuccess('QR code processed successfully');
+      
+      // Show success dialog
+      _showSuccessDialog(qrCode);
     } catch (e) {
       loggingProvider.logError('QR scan error: $e', stackTrace: StackTrace.current);
       _showErrorDialog('Failed to process QR code: $e');

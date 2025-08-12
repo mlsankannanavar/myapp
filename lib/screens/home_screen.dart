@@ -9,6 +9,7 @@ import '../widgets/batch_card_widget.dart';
 import '../widgets/loading_widget.dart';
 import '../widgets/error_widget.dart';
 import '../utils/app_colors.dart';
+import '../utils/log_level.dart';
 import 'qr_scanner_screen.dart';
 import 'batch_list_screen.dart';
 import 'ocr_scanner_screen.dart';
@@ -91,7 +92,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       loggingProvider.logNetwork('Checking API health');
       
       final apiService = ApiService();
-      final isHealthy = await apiService.checkHealth();
+      final healthResponse = await apiService.checkHealth();
+      final isHealthy = healthResponse.isSuccess;
       
       appStateProvider.setApiHealthy(isHealthy);
       
@@ -452,9 +454,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
             const SizedBox(height: 16),
             if (batchProvider.isLoading)
-              const LoadingWidget(
-                message: 'Loading recent batches...',
+              const SizedBox(
                 height: 120,
+                child: LoadingWidget(
+                  message: 'Loading recent batches...',
+                ),
               )
             else if (recentBatches.isEmpty)
               _buildEmptyState(
@@ -474,7 +478,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   return BatchCardWidget(
                     batch: recentBatches[index],
                     onTap: () => _onBatchTapped(recentBatches[index]),
-                    isCompact: true,
+                    compact: true,
                   );
                 },
               ),
