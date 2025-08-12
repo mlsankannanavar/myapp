@@ -91,12 +91,13 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     }
   }
 
-  void _initializeOCR() {
+  void _initializeOCR() async {
     final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
     
     try {
       _ocrService = OCRService();
-      loggingProvider.logApp('OCR service initialized');
+      await _ocrService.initialize(); // Actually initialize the OCR service
+      loggingProvider.logApp('OCR service initialized successfully');
     } catch (e) {
       loggingProvider.logError('OCR service initialization failed: $e');
     }
@@ -585,6 +586,12 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
       setState(() {
         _isProcessing = true;
       });
+
+      // Check if OCR service is initialized
+      if (!_ocrService.isInitialized) {
+        loggingProvider.logError('OCR service not initialized, attempting to initialize...');
+        await _ocrService.initialize();
+      }
 
       loggingProvider.logOCR('Starting OCR processing');
 

@@ -83,7 +83,10 @@ class Helpers {
   }
   
   static bool isValidSessionId(String sessionId) {
-    return sessionId.isNotEmpty && sessionId.length >= 3;
+    // Valid session IDs start with 'medha-' or 'session_' and have minimum length
+    return sessionId.isNotEmpty && 
+           sessionId.length >= 8 && 
+           (sessionId.startsWith('medha-') || sessionId.startsWith('session_'));
   }
   
   // Network utilities

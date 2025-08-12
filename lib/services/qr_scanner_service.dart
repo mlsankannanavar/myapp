@@ -123,6 +123,9 @@ class QrScannerService extends ChangeNotifier {
       if (_isValidSessionId(rawValue)) {
         _logger.logQrScan('Valid session ID detected', 
             qrData: rawValue, success: true);
+        
+        // Return the scanned session ID so it can be used by calling code
+        _scannedData = rawValue;
         notifyListeners();
       } else {
         _logger.logQrScan('Invalid session ID format', 

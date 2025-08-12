@@ -460,11 +460,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               )
             else if (recentBatches.isEmpty)
               _buildEmptyState(
-                'No batches scanned yet',
-                'Start by scanning your first batch QR code',
-                Icons.qr_code_scanner,
-                () => _navigateToQRScanner(),
-                'Scan QR Code',
+                'No batches available',
+                'Scan a QR code to see batch information here',
+                Icons.inventory_2,
+                null, // Remove the QR scanner button
+                null,
               )
             else
               ListView.separated(
@@ -565,8 +565,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     String title,
     String subtitle,
     IconData icon,
-    VoidCallback onAction,
-    String actionText,
+    VoidCallback? onAction,
+    String? actionText,
   ) {
     return Card(
       child: Padding(
@@ -595,16 +595,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: onAction,
-              icon: Icon(icon),
-              label: Text(actionText),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
+            // Only show button if action and text are provided
+            if (onAction != null && actionText != null) ...[
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: onAction,
+                icon: Icon(icon),
+                label: Text(actionText),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),

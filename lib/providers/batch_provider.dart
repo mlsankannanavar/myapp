@@ -353,7 +353,18 @@ class BatchProvider extends ChangeNotifier {
     try {
       _logger.logQRScan('Processing QR data: $qrData');
       
-      // Try to parse as JSON first
+      // Check if this is a session ID first (starts with medha- or session_)
+      if ((qrData.startsWith('medha-') || qrData.startsWith('session_')) && qrData.length > 8) {
+        // This is a session ID - set it and load batches
+        _currentSessionId = qrData;
+        _logger.logApp('Session ID set from QR scan', data: {'sessionId': qrData});
+        
+        // Load batches for this session from API
+        await loadBatchesForSession(qrData);
+        return;
+      }
+      
+      // Try to parse as JSON for batch data
       Map<String, dynamic>? jsonData;
       try {
         jsonData = Map<String, dynamic>.from(
@@ -585,7 +596,7 @@ class BatchProvider extends ChangeNotifier {
 
   // Generate session ID
   String _generateSessionId() {
-    return 'session_${DateTime.now().millisecondsSinceEpoch}';
+    return 'medha-${DateTime.now().millisecondsSinceEpoch}';
   }
 
   // Add batch method
