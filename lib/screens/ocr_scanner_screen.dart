@@ -70,6 +70,16 @@
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
+            import 'package:flutter/material.dart';
+            import 'package:camera/camera.dart';
+            import 'package:provider/provider.dart';
+            import '../providers/logging_provider.dart';
+            import '../providers/batch_provider.dart';
+            import '../services/ocr_service.dart';
+            import '../services/api_service.dart';
+            import '../widgets/loading_widget.dart';
+            import '../utils/app_colors.dart';
+            import 'dart:io';
             child: const Text('Cancel'),
           ),
           ElevatedButton(
