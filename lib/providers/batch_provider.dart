@@ -656,19 +656,6 @@ class BatchProvider extends ChangeNotifier {
     }
   }
 
-  // Save all batches to local storage
-  Future<void> _saveBatchesToLocal() async {
-    try {
-      if (_batchBox != null) {
-        for (final batch in _batches) {
-          await _batchBox!.put(batch.id, batch.toMap());
-        }
-      }
-    } catch (e) {
-      _logger.logError('Failed to save batches to local storage', error: e);
-    }
-  }
-
   // Log operation helper
   void _logOperation(String message, {
     LogLevel level = LogLevel.info,

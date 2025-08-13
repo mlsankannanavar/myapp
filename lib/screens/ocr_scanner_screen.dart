@@ -109,7 +109,6 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
   Future<void> _showBatchMatchAndSubmitFlow() async {
     final batchProvider = Provider.of<BatchProvider>(context, listen: false);
     final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
-    final apiService = ApiService();
     
     if (!batchProvider.hasSession) {
       _showInfoDialog('No active session. Please scan a QR code first.');
@@ -228,11 +227,11 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
       
     } catch (e, stackTrace) {
       // Close processing dialog if still open
-      if (Navigator.canPop(context)) Navigator.of(context).pop();
+      if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
       
       loggingProvider.logError('Batch matching failed', error: e, stackTrace: stackTrace);
       batchProvider.incrementErrorCount();
-      _showInfoDialog('Failed to process batch: ${e.toString()}');
+      if (mounted) _showInfoDialog('Failed to process batch: ${e.toString()}');
     }
   }
 
