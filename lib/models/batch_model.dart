@@ -2,7 +2,8 @@ class BatchModel {
   final String id;
   final String batchId;
   final String sessionId;
-  final String? productName;
+  final String? productName; // legacy
+  final String? itemName; // new API field
   final String? manufacturingDate;
   final String? expiryDate;
   final String? batchNumber;
@@ -19,7 +20,8 @@ class BatchModel {
     String? id,
     required this.batchId,
     required this.sessionId,
-    this.productName,
+  this.productName,
+  this.itemName,
     this.manufacturingDate,
     this.expiryDate,
     this.batchNumber,
@@ -41,10 +43,11 @@ class BatchModel {
       id: json['id']?.toString(),
       batchId: json['batch_id']?.toString() ?? '',
       sessionId: sessionId,
-      productName: json['product_name']?.toString(),
+  productName: json['product_name']?.toString(),
+  itemName: json['item_name']?.toString(),
       manufacturingDate: json['manufacturing_date']?.toString(),
       expiryDate: json['expiry_date']?.toString(),
-      batchNumber: json['batch_number']?.toString() ?? json['batch_id']?.toString(),
+  batchNumber: json['batch_number']?.toString() ?? json['batch_id']?.toString(),
       lotNumber: json['lot_number']?.toString(),
       manufacturer: json['manufacturer']?.toString(),
       status: json['status']?.toString() ?? 'Active',
@@ -69,6 +72,7 @@ class BatchModel {
       'batch_id': batchId,
       'session_id': sessionId,
       'product_name': productName,
+      'item_name': itemName,
       'manufacturing_date': manufacturingDate,
       'expiry_date': expiryDate,
       'batch_number': batchNumber,
@@ -90,6 +94,7 @@ class BatchModel {
       'batchId': batchId,
       'sessionId': sessionId,
       'productName': productName,
+      'itemName': itemName,
       'manufacturingDate': manufacturingDate,
       'expiryDate': expiryDate,
       'batchNumber': batchNumber,
@@ -110,7 +115,8 @@ class BatchModel {
       id: map['id'],
       batchId: map['batchId'] ?? '',
       sessionId: map['sessionId'] ?? '',
-      productName: map['productName'],
+  productName: map['productName'],
+  itemName: map['itemName'],
       manufacturingDate: map['manufacturingDate'],
       expiryDate: map['expiryDate'],
       batchNumber: map['batchNumber'],
@@ -168,6 +174,9 @@ class BatchModel {
   }
 
   String get displayName {
+    if (itemName != null && itemName!.isNotEmpty) {
+      return itemName!;
+    }
     if (productName != null && productName!.isNotEmpty) {
       return productName!;
     }

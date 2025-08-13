@@ -11,6 +11,34 @@ import '../utils/log_level.dart';
 import 'logging_service.dart';
 
 class ApiService {
+
+  /// Submit final batch result to backend
+  Future<ApiResponse<Map<String, dynamic>>> submitMobileBatch({
+    required String sessionId,
+    required String batchNumber,
+    required int quantity,
+    required String captureId,
+    required int confidence,
+    required String matchType,
+    required int submitTimestamp,
+    required String extractedText,
+    required bool selectedFromOptions,
+    List<String>? alternativeMatches,
+  }) async {
+    final endpoint = '/api/submit-mobile-batch/$sessionId';
+    final body = {
+      'batchNumber': batchNumber,
+      'quantity': quantity,
+      'captureId': captureId,
+      'confidence': confidence,
+      'matchType': matchType,
+      'submitTimestamp': submitTimestamp,
+      'extractedText': extractedText,
+      'selectedFromOptions': selectedFromOptions,
+      'alternativeMatches': alternativeMatches ?? [],
+    };
+    return await post(endpoint, body: body);
+  }
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();

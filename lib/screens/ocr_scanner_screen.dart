@@ -1,3 +1,107 @@
+  // --- New: Fuzzy match, quantity pad, and submit workflow ---
+  Future<void> _showBatchMatchAndSubmitFlow() async {
+    final batchProvider = Provider.of<BatchProvider>(context, listen: false);
+    final apiService = ApiService();
+    final sessionId = batchProvider.currentSessionId ?? 'unknown';
+    // For demo, extract batch/expiry from first line containing 'batch' and 'exp'
+    String? extractedBatch;
+    String? extractedExpiry;
+    for (final line in _extractedLines) {
+      if (extractedBatch == null && line.toLowerCase().contains('batch')) {
+        final match = RegExp(r'([A-Za-z0-9\-]+)').firstMatch(line);
+        if (match != null) extractedBatch = match.group(1);
+      }
+      if (extractedExpiry == null && line.toLowerCase().contains('exp')) {
+        final match = RegExp(r'(\d{2}/\d{4}|\d{2}/\d{2}/\d{4}|\d{4}-\d{2}-\d{2})').firstMatch(line);
+        if (match != null) extractedExpiry = match.group(1);
+      }
+    }
+    if (extractedBatch == null) {
+      _showInfoDialog('No batch number found in extracted text.');
+      return;
+    }
+    final matches = _ocrService.findBestBatchMatches(
+      extractedBatch: extractedBatch,
+      extractedExpiry: extractedExpiry,
+      batches: batchProvider.batches,
+    );
+    if (matches.isEmpty) {
+      _showInfoDialog('No matching batch found.');
+      return;
+    }
+    final bestMatch = matches.first;
+    final batch = bestMatch.batch;
+    final confidence = (bestMatch.similarity * 100).toInt();
+    // Ask user to confirm and enter quantity
+    final quantity = await _showQuantityPad();
+    if (quantity == null) return;
+    // Call API to submit
+    final resp = await apiService.submitMobileBatch(
+      sessionId: sessionId,
+      batchNumber: batch.batchNumber ?? batch.batchId ?? '',
+      quantity: quantity,
+      captureId: DateTime.now().millisecondsSinceEpoch.toString(),
+      confidence: confidence,
+      matchType: bestMatch.similarity == 1.0 ? 'exact' : 'fuzzy',
+      submitTimestamp: DateTime.now().millisecondsSinceEpoch,
+      extractedText: _extractedText ?? '',
+      selectedFromOptions: true,
+      alternativeMatches: matches.length > 1 ? matches.skip(1).map((m) => m.batch.batchNumber ?? m.batch.batchId ?? '').toList() : [],
+    );
+    if (resp.isSuccess) {
+      _showInfoDialog('Batch submitted successfully!');
+    } else {
+      _showInfoDialog('Failed to submit batch: \\n${resp.message ?? 'Unknown error'}');
+    }
+  }
+
+  Future<int?> _showQuantityPad() async {
+    int? result;
+    final controller = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enter Quantity'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(hintText: 'Quantity'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final val = int.tryParse(controller.text);
+              if (val != null && val > 0) {
+                result = val;
+                Navigator.of(context).pop();
+              }
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+    return result;
+  }
+
+  void _showInfoDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
@@ -408,9 +512,9 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _processAsBatch,
+                  onPressed: _showBatchMatchAndSubmitFlow,
                   icon: const Icon(Icons.inventory),
-                  label: const Text('Process as Batch'),
+                  label: const Text('Submit Batch'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,

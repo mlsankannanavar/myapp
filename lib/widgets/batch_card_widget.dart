@@ -67,6 +67,15 @@ class BatchCardWidget extends StatelessWidget {
                             fontFamily: 'monospace',
                           ),
                         ),
+                        if (batch.itemName != null)
+                          Text(
+                            batch.itemName!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -129,6 +138,15 @@ class BatchCardWidget extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   color: _getStatusColor(),
+                ),
+              ),
+            if (batch.itemName != null)
+              Text(
+                batch.itemName!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
           ],
