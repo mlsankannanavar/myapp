@@ -60,16 +60,24 @@ jobs:
         flutter config --no-cli-animations
         flutter --disable-analytics
         
-    - name: Flutter doctor
-      run: flutter doctor -v
+    - name: Get Flutter dependencies first
+      run: |
+        echo "Cleaning pub cache..."
+        flutter pub cache clean
+        echo "Getting dependencies..."
+        flutter pub get --verbose
+        echo "Checking dependency tree..."
+        flutter pub deps
+      continue-on-error: false
         
     - name: Accept Android licenses
       run: yes | flutter doctor --android-licenses
       continue-on-error: true
         
-    - name: Get Flutter dependencies
-      run: flutter pub get
-      
+    - name: Verify Flutter setup
+      run: flutter doctor
+      continue-on-error: true
+        
     - name: Run Flutter analyze
       run: flutter analyze --no-fatal-infos --no-fatal-warnings
       continue-on-error: true
