@@ -1,126 +1,14 @@
-  // --- New: Fuzzy match, quantity pad, and submit workflow ---
-  Future<void> _showBatchMatchAndSubmitFlow() async {
-    final batchProvider = Provider.of<BatchProvider>(context, listen: false);
-    final apiService = ApiService();
-    final sessionId = batchProvider.currentSessionId ?? 'unknown';
-    // For demo, extract batch/expiry from first line containing 'batch' and 'exp'
-    String? extractedBatch;
-    String? extractedExpiry;
-    for (final line in _extractedLines) {
-      if (extractedBatch == null && line.toLowerCase().contains('batch')) {
-        final match = RegExp(r'([A-Za-z0-9\-]+)').firstMatch(line);
-        if (match != null) extractedBatch = match.group(1);
-      }
-      if (extractedExpiry == null && line.toLowerCase().contains('exp')) {
-        final match = RegExp(r'(\d{2}/\d{4}|\d{2}/\d{2}/\d{4}|\d{4}-\d{2}-\d{2})').firstMatch(line);
-        if (match != null) extractedExpiry = match.group(1);
-      }
-    }
-    if (extractedBatch == null) {
-      _showInfoDialog('No batch number found in extracted text.');
-      return;
-    }
-    final matches = _ocrService.findBestBatchMatches(
-      extractedBatch: extractedBatch,
-      extractedExpiry: extractedExpiry,
-      batches: batchProvider.batches,
-    );
-    if (matches.isEmpty) {
-      _showInfoDialog('No matching batch found.');
-      return;
-    }
-    final bestMatch = matches.first;
-    final batch = bestMatch.batch;
-    final confidence = (bestMatch.similarity * 100).toInt();
-    // Ask user to confirm and enter quantity
-    final quantity = await _showQuantityPad();
-    if (quantity == null) return;
-    // Call API to submit
-    final resp = await apiService.submitMobileBatch(
-      sessionId: sessionId,
-      batchNumber: batch.batchNumber ?? batch.batchId ?? '',
-      quantity: quantity,
-      captureId: DateTime.now().millisecondsSinceEpoch.toString(),
-      confidence: confidence,
-      matchType: bestMatch.similarity == 1.0 ? 'exact' : 'fuzzy',
-      submitTimestamp: DateTime.now().millisecondsSinceEpoch,
-      extractedText: _extractedText ?? '',
-      selectedFromOptions: true,
-      alternativeMatches: matches.length > 1 ? matches.skip(1).map((m) => m.batch.batchNumber ?? m.batch.batchId ?? '').toList() : [],
-    );
-    if (resp.isSuccess) {
-      _showInfoDialog('Batch submitted successfully!');
-    } else {
-      _showInfoDialog('Failed to submit batch: \\n${resp.message ?? 'Unknown error'}');
-    }
-  }
-
-  Future<int?> _showQuantityPad() async {
-    int? result;
-    final controller = TextEditingController();
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Enter Quantity'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(hintText: 'Quantity'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            import 'package:flutter/material.dart';
-            import 'package:camera/camera.dart';
-            import 'package:provider/provider.dart';
-            import '../providers/logging_provider.dart';
-            import '../providers/batch_provider.dart';
-            import '../services/ocr_service.dart';
-            import '../services/api_service.dart';
-            import '../widgets/loading_widget.dart';
-            import '../utils/app_colors.dart';
-            import 'dart:io';
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final val = int.tryParse(controller.text);
-              if (val != null && val > 0) {
-                result = val;
-                Navigator.of(context).pop();
-              }
-            },
-            child: const Text('Submit'),
-          ),
-        ],
-      ),
-    );
-    return result;
-  }
-
-  void _showInfoDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
+
 import '../providers/logging_provider.dart';
 import '../providers/batch_provider.dart';
-import '../services/ocr_service_new.dart';
+import '../services/ocr_service.dart';
+import '../services/api_service.dart';
 import '../widgets/loading_widget.dart';
 import '../utils/app_colors.dart';
-import 'dart:io';
 
 class OCRScannerScreen extends StatefulWidget {
   const OCRScannerScreen({super.key});
@@ -132,7 +20,7 @@ class OCRScannerScreen extends StatefulWidget {
 class _OCRScannerScreenState extends State<OCRScannerScreen>
     with WidgetsBindingObserver {
   CameraController? _cameraController;
-  OCRService _ocrService = OCRService();
+  late OcrService _ocrService;
   
   bool _isCameraInitialized = false;
   bool _isProcessing = false;
@@ -209,12 +97,125 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
     
     try {
-      _ocrService = OCRService();
-      await _ocrService.initialize(); // Actually initialize the OCR service
+      _ocrService = OcrService.instance;
+      await _ocrService.initialize();
       loggingProvider.logApp('OCR service initialized successfully');
     } catch (e) {
       loggingProvider.logError('OCR service initialization failed: $e');
     }
+  }
+
+  // --- New: Fuzzy match, quantity pad, and submit workflow ---
+  Future<void> _showBatchMatchAndSubmitFlow() async {
+    final batchProvider = Provider.of<BatchProvider>(context, listen: false);
+    final apiService = ApiService();
+    final sessionId = batchProvider.currentSessionId ?? 'unknown';
+    
+    // For demo, extract batch/expiry from first line containing 'batch' and 'exp'
+    String? extractedBatch;
+    String? extractedExpiry;
+    for (final line in _extractedLines) {
+      if (extractedBatch == null && line.toLowerCase().contains('batch')) {
+        final match = RegExp(r'([A-Za-z0-9\-]+)').firstMatch(line);
+        if (match != null) extractedBatch = match.group(1);
+      }
+      if (extractedExpiry == null && line.toLowerCase().contains('exp')) {
+        final match = RegExp(r'(\d{2}/\d{4}|\d{2}/\d{2}/\d{4}|\d{4}-\d{2}-\d{2})').firstMatch(line);
+        if (match != null) extractedExpiry = match.group(1);
+      }
+    }
+    
+    if (extractedBatch == null) {
+      _showInfoDialog('No batch number found in extracted text.');
+      return;
+    }
+    
+    final matches = _ocrService.findBestBatchMatches(
+      extractedBatch: extractedBatch,
+      extractedExpiry: extractedExpiry,
+      batches: batchProvider.batches,
+    );
+    
+    if (matches.isEmpty) {
+      _showInfoDialog('No matching batch found.');
+      return;
+    }
+    
+    final bestMatch = matches.first;
+    final batch = bestMatch.batch;
+    final confidence = (bestMatch.similarity * 100).toInt();
+    
+    // Ask user to confirm and enter quantity
+    final quantity = await _showQuantityPad();
+    if (quantity == null) return;
+    
+    // Call API to submit
+    final resp = await apiService.submitMobileBatch(
+      sessionId: sessionId,
+      batchNumber: batch.batchNumber ?? batch.batchId ?? '',
+      quantity: quantity,
+      captureId: DateTime.now().millisecondsSinceEpoch.toString(),
+      confidence: confidence,
+      matchType: bestMatch.similarity == 1.0 ? 'exact' : 'fuzzy',
+      submitTimestamp: DateTime.now().millisecondsSinceEpoch,
+      extractedText: _extractedText ?? '',
+      selectedFromOptions: true,
+      alternativeMatches: matches.length > 1 ? matches.skip(1).map((m) => (m.batch.batchNumber ?? m.batch.batchId ?? '').toString()).toList() : [],
+    );
+    
+    if (resp.isSuccess) {
+      _showInfoDialog('Batch submitted successfully!');
+    } else {
+      _showInfoDialog('Failed to submit batch: \n${resp.message ?? 'Unknown error'}');
+    }
+  }
+
+  Future<int?> _showQuantityPad() async {
+    int? result;
+    final controller = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enter Quantity'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(hintText: 'Quantity'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final val = int.tryParse(controller.text);
+              if (val != null && val > 0) {
+                result = val;
+                Navigator.of(context).pop();
+              }
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+    return result;
+  }
+
+  void _showInfoDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -792,62 +793,6 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
       loggingProvider.logApp('OCR text shared');
       
       // This would typically use the share package
-    }
-  }
-
-  void _processAsBatch() async {
-    final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
-    final batchProvider = Provider.of<BatchProvider>(context, listen: false);
-    
-    if (_extractedText == null || _extractedText!.isEmpty) {
-      loggingProvider.logWarning('No text to process as batch');
-      return;
-    }
-
-    try {
-      loggingProvider.logOCR('Processing OCR text as batch data');
-
-      // Create a batch from OCR data
-      await batchProvider.createBatchFromOCR(_extractedText!, _extractedLines);
-
-      loggingProvider.logSuccess('Batch created from OCR data');
-
-      // Show success dialog
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            icon: const Icon(
-              Icons.check_circle,
-              color: Colors.green,
-              size: 48,
-            ),
-            title: const Text('Batch Created'),
-            content: const Text('Batch information has been extracted and saved successfully.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Continue'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop(); // Return to previous screen
-                },
-                child: const Text('Done'),
-              ),
-            ],
-          ),
-        );
-      }
-    } catch (e) {
-      loggingProvider.logError('Failed to process OCR as batch: $e');
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to process batch: $e')),
-        );
-      }
     }
   }
 

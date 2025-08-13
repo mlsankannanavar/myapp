@@ -70,7 +70,7 @@ class BatchCardWidget extends StatelessWidget {
                         if (batch.itemName != null)
                           Text(
                             batch.itemName!,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 13,
                               color: Colors.black87,
                               fontWeight: FontWeight.w500,
@@ -143,7 +143,7 @@ class BatchCardWidget extends StatelessWidget {
             if (batch.itemName != null)
               Text(
                 batch.itemName!,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 12,
                   color: Colors.black87,
                   fontWeight: FontWeight.w500,

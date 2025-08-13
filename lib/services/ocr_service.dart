@@ -1,111 +1,10 @@
-  /// Fuzzy batch matching using Levenshtein distance and expiry validation
-  /// Returns a list of matches with similarity >= [similarityThreshold] and valid expiry
-  List<BatchMatchResult> findBestBatchMatches({
-    required String extractedBatch,
-    required String? extractedExpiry,
-    required List<dynamic> batches, // List<BatchModel> or Map
-    double similarityThreshold = 0.75,
-  }) {
-    final List<BatchMatchResult> results = [];
-    final normalizedExtracted = extractedBatch.trim().toUpperCase();
-    for (final batch in batches) {
-      final batchNumber = (batch.batchNumber ?? batch.batchId ?? '').toString().trim().toUpperCase();
-      if (batchNumber.isEmpty) continue;
-
-      // Sliding window: compare all substrings of batchNumber with extractedBatch
-      final windowSize = normalizedExtracted.length;
-      double bestSim = 0.0;
-      for (int i = 0; i <= batchNumber.length - windowSize; i++) {
-        final sub = batchNumber.substring(i, i + windowSize);
-        final sim = _levenshteinSimilarity(normalizedExtracted, sub);
-        if (sim > bestSim) bestSim = sim;
-      }
-      // Also compare full batch number
-      final fullSim = _levenshteinSimilarity(normalizedExtracted, batchNumber);
-      if (fullSim > bestSim) bestSim = fullSim;
-
-      // Expiry validation (if extractedExpiry is present)
-      bool expiryValid = true;
-      if (extractedExpiry != null && batch.expiryDate != null) {
-        expiryValid = _compareExpiryDates(extractedExpiry, batch.expiryDate);
-      }
-
-      if (bestSim >= similarityThreshold && expiryValid) {
-        results.add(BatchMatchResult(
-          batch: batch,
-          similarity: bestSim,
-          expiryValid: expiryValid,
-        ));
-      }
-    }
-    // Sort by similarity descending
-    results.sort((a, b) => b.similarity.compareTo(a.similarity));
-    return results;
-  }
-
-  /// Levenshtein similarity (1 - normalized distance)
-  double _levenshteinSimilarity(String a, String b) {
-    final dist = _levenshtein(a, b);
-    final maxLen = a.length > b.length ? a.length : b.length;
-    if (maxLen == 0) return 1.0;
-    return 1.0 - (dist / maxLen);
-  }
-
-  /// Levenshtein distance implementation
-  int _levenshtein(String s, String t) {
-    if (s == t) return 0;
-    if (s.isEmpty) return t.length;
-    if (t.isEmpty) return s.length;
-    List<List<int>> d = List.generate(s.length + 1, (_) => List.filled(t.length + 1, 0));
-    for (int i = 0; i <= s.length; i++) d[i][0] = i;
-    for (int j = 0; j <= t.length; j++) d[0][j] = j;
-    for (int i = 1; i <= s.length; i++) {
-      for (int j = 1; j <= t.length; j++) {
-        int cost = s[i - 1] == t[j - 1] ? 0 : 1;
-        d[i][j] = [
-          d[i - 1][j] + 1,
-          d[i][j - 1] + 1,
-          d[i - 1][j - 1] + cost
-        ].reduce((a, b) => a < b ? a : b);
-      }
-    }
-    return d[s.length][t.length];
-  }
-
-  /// Expiry date comparison (supports multiple formats)
-  bool _compareExpiryDates(String extracted, String batchExpiry) {
-    final formats = [
-      'dd/MM/yyyy', 'MM/yyyy', 'yyyy-MM-dd', 'dd-MM-yyyy', 'MM-yy', 'MM/yyyy', 'yyyy/MM/dd', 'dd MMM yyyy'
-    ];
-    DateTime? parseDate(String s) {
-      for (final f in formats) {
-        try {
-          return Helpers.parseDateFlexible(s, format: f);
-        } catch (_) {}
-      }
-      return null;
-    }
-    final d1 = parseDate(extracted);
-    final d2 = parseDate(batchExpiry);
-    if (d1 == null || d2 == null) return false;
-    // Allow for month/year only matches
-    return d1.year == d2.year && d1.month == d2.month;
-  }
-
-/// Result class for batch matching
-}
-
-class BatchMatchResult {
-  final dynamic batch;
-  final double similarity;
-  final bool expiryValid;
-  BatchMatchResult({required this.batch, required this.similarity, required this.expiryValid});
-}
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:intl/intl.dart';
+
 import '../utils/constants.dart';
 import '../utils/helpers.dart';
 import '../utils/log_level.dart';
@@ -114,6 +13,7 @@ import 'logging_service.dart';
 class OcrService extends ChangeNotifier {
   static final OcrService _instance = OcrService._internal();
   factory OcrService() => _instance;
+  static OcrService get instance => _instance;
   OcrService._internal();
 
   final LoggingService _logger = LoggingService();
@@ -293,6 +193,11 @@ class OcrService extends ChangeNotifier {
     }
   }
 
+  // Process image with path
+  Future<String?> processImage(String imagePath) async {
+    return await processImageFile(File(imagePath));
+  }
+
   // Internal method to process image for text recognition
   Future<String?> _processImageForText(File imageFile) async {
     try {
@@ -419,6 +324,113 @@ class OcrService extends ChangeNotifier {
     }
   }
 
+  /// Fuzzy batch matching using Levenshtein distance and expiry validation
+  /// Returns a list of matches with similarity >= [similarityThreshold] and valid expiry
+  List<BatchMatchResult> findBestBatchMatches({
+    required String extractedBatch,
+    required String? extractedExpiry,
+    required List<dynamic> batches, // List<BatchModel> or Map
+    double similarityThreshold = 0.75,
+  }) {
+    final List<BatchMatchResult> results = [];
+    final normalizedExtracted = extractedBatch.trim().toUpperCase();
+    
+    for (final batch in batches) {
+      final batchNumber = (batch.batchNumber ?? batch.batchId ?? '').toString().trim().toUpperCase();
+      if (batchNumber.isEmpty) continue;
+
+      // Sliding window: compare all substrings of batchNumber with extractedBatch
+      final windowSize = normalizedExtracted.length;
+      double bestSim = 0.0;
+      
+      for (int i = 0; i <= batchNumber.length - windowSize; i++) {
+        final sub = batchNumber.substring(i, i + windowSize);
+        final sim = _levenshteinSimilarity(normalizedExtracted, sub);
+        if (sim > bestSim) bestSim = sim;
+      }
+      
+      // Also compare full batch number
+      final fullSim = _levenshteinSimilarity(normalizedExtracted, batchNumber);
+      if (fullSim > bestSim) bestSim = fullSim;
+
+      // Expiry validation (if extractedExpiry is present)
+      bool expiryValid = true;
+      if (extractedExpiry != null && batch.expiryDate != null) {
+        expiryValid = _compareExpiryDates(extractedExpiry, batch.expiryDate);
+      }
+
+      if (bestSim >= similarityThreshold && expiryValid) {
+        results.add(BatchMatchResult(
+          batch: batch,
+          similarity: bestSim,
+          expiryValid: expiryValid,
+        ));
+      }
+    }
+    
+    // Sort by similarity descending
+    results.sort((a, b) => b.similarity.compareTo(a.similarity));
+    return results;
+  }
+
+  /// Levenshtein similarity (1 - normalized distance)
+  double _levenshteinSimilarity(String a, String b) {
+    final dist = _levenshtein(a, b);
+    final maxLen = a.length > b.length ? a.length : b.length;
+    if (maxLen == 0) return 1.0;
+    return 1.0 - (dist / maxLen);
+  }
+
+  /// Levenshtein distance implementation
+  int _levenshtein(String s, String t) {
+    if (s == t) return 0;
+    if (s.isEmpty) return t.length;
+    if (t.isEmpty) return s.length;
+    List<List<int>> d = List.generate(s.length + 1, (_) => List.filled(t.length + 1, 0));
+    
+    for (int i = 0; i <= s.length; i++) {
+      d[i][0] = i;
+    }
+    for (int j = 0; j <= t.length; j++) {
+      d[0][j] = j;
+    }
+    
+    for (int i = 1; i <= s.length; i++) {
+      for (int j = 1; j <= t.length; j++) {
+        int cost = s[i - 1] == t[j - 1] ? 0 : 1;
+        d[i][j] = [
+          d[i - 1][j] + 1,
+          d[i][j - 1] + 1,
+          d[i - 1][j - 1] + cost
+        ].reduce((a, b) => a < b ? a : b);
+      }
+    }
+    return d[s.length][t.length];
+  }
+
+  /// Expiry date comparison (supports multiple formats)
+  bool _compareExpiryDates(String extracted, String batchExpiry) {
+    final formats = [
+      'dd/MM/yyyy', 'MM/yyyy', 'yyyy-MM-dd', 'dd-MM-yyyy', 'MM-yy', 'MM/yyyy', 'yyyy/MM/dd', 'dd MMM yyyy'
+    ];
+    
+    DateTime? parseDate(String s) {
+      for (final f in formats) {
+        try {
+          return DateFormat(f).parse(s);
+        } catch (_) {}
+      }
+      return null;
+    }
+    
+    final d1 = parseDate(extracted);
+    final d2 = parseDate(batchExpiry);
+    if (d1 == null || d2 == null) return false;
+    
+    // Allow for month/year only matches
+    return d1.year == d2.year && d1.month == d2.month;
+  }
+
   // Switch camera (front/back)
   Future<void> switchCamera() async {
     if (!_isInitialized || _cameras == null || _cameras!.length < 2) {
@@ -538,4 +550,17 @@ class OcrService extends ChangeNotifier {
     _logger.logOcr('OCR service disposed');
     super.dispose();
   }
+}
+
+/// Result class for batch matching
+class BatchMatchResult {
+  final dynamic batch;
+  final double similarity;
+  final bool expiryValid;
+  
+  BatchMatchResult({
+    required this.batch, 
+    required this.similarity, 
+    required this.expiryValid
+  });
 }
