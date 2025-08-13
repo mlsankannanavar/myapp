@@ -67,7 +67,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void _initializeApp() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final appStateProvider = Provider.of<AppStateProvider>(context, listen: false);
-      final batchProvider = Provider.of<BatchProvider>(context, listen: false);
       final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
 
       // Log app initialization
@@ -75,7 +74,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
       // Initialize providers
       appStateProvider.initialize();
-      batchProvider.loadBatchHistory();
+      // Note: Don't load batches until QR is scanned
 
       // Check API health
       _checkApiHealth();
@@ -333,8 +332,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 Expanded(
                   child: _buildStatCard(
                     'Total Scans',
-                    batchProvider.totalScannedBatches.toString(),
-                    Icons.qr_code,
+                    batchProvider.totalScans.toString(),
+                    Icons.qr_code_scanner,
                     AppColors.primary,
                   ),
                 ),
@@ -342,7 +341,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 Expanded(
                   child: _buildStatCard(
                     'Today\'s Logs',
-                    loggingProvider.getTodayLogsCount().toString(),
+                    loggingProvider.getTodaysLogCount().toString(),
                     Icons.today,
                     Colors.green.shade600,
                   ),
@@ -355,7 +354,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 Expanded(
                   child: _buildStatCard(
                     'Errors',
-                    loggingProvider.getErrorLogsCount().toString(),
+                    batchProvider.errorCount.toString(),
                     Icons.error_outline,
                     AppColors.logError,
                   ),
@@ -365,10 +364,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   child: Consumer<AppStateProvider>(
                     builder: (context, appState, child) {
                       return _buildStatCard(
-                        'API Status',
-                        appState.isApiHealthy ? 'Healthy' : 'Offline',
-                        appState.isApiHealthy ? Icons.check_circle : Icons.error,
-                        appState.isApiHealthy ? Colors.green.shade600 : AppColors.logError,
+                        'Submissions',
+                        batchProvider.successfulSubmissions.toString(),
+                        Icons.check_circle_outline,
+                        Colors.green.shade600,
                       );
                     },
                   ),
@@ -428,25 +427,42 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget _buildRecentBatches() {
     return Consumer<BatchProvider>(
       builder: (context, batchProvider, child) {
-        final recentBatches = batchProvider.recentBatches;
-
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Recent Batches',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Session Batches',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (batchProvider.hasSession)
+                      Text(
+                        'Session: ${batchProvider.currentSessionId}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                  ],
                 ),
-                if (recentBatches.isNotEmpty)
+                if (batchProvider.hasBatches)
                   TextButton(
                     onPressed: () => _navigateToBatchList(),
                     child: const Text('View All'),
+                  )
+                else
+                  TextButton(
+                    onPressed: () => _navigateToQRScanner(),
+                    child: const Text('Scan QR'),
                   ),
               ],
             ),
@@ -455,27 +471,35 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               const SizedBox(
                 height: 120,
                 child: LoadingWidget(
-                  message: 'Loading recent batches...',
+                  message: 'Loading batches...',
                 ),
               )
-            else if (recentBatches.isEmpty)
+            else if (!batchProvider.hasSession)
               _buildEmptyState(
-                'No batches available',
-                'Scan a QR code to see batch information here',
-                Icons.inventory_2,
-                null, // Remove the QR scanner button
+                'No Active Session',
+                'Scan a QR code to start a session and load batch information',
+                Icons.qr_code_scanner,
+                () => _navigateToQRScanner(),
+                'Scan QR Code',
+              )
+            else if (!batchProvider.hasBatches)
+              _buildEmptyState(
+                'No Batches Available',
+                'No batches found for this session.',
+                Icons.inventory_outlined,
+                null,
                 null,
               )
             else
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: recentBatches.length > 3 ? 3 : recentBatches.length,
+                itemCount: batchProvider.batches.length > 3 ? 3 : batchProvider.batches.length,
                 separatorBuilder: (context, index) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   return BatchCardWidget(
-                    batch: recentBatches[index],
-                    onTap: () => _onBatchTapped(recentBatches[index]),
+                    batch: batchProvider.batches[index],
+                    onTap: () => _onBatchTapped(batchProvider.batches[index]),
                     compact: true,
                   );
                 },
@@ -682,7 +706,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     await Future.wait([
       _checkApiHealth(),
-      Provider.of<BatchProvider>(context, listen: false).loadBatchHistory(),
+      // Note: Don't auto-load batches, require QR scan
     ]);
   }
 

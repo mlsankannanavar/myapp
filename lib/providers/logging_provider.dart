@@ -134,6 +134,30 @@ class LoggingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Dynamic count methods
+  int getTodaysLogCount() {
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    final todayEnd = todayStart.add(const Duration(days: 1));
+    
+    return logs.where((log) => 
+      log.timestamp.isAfter(todayStart) && 
+      log.timestamp.isBefore(todayEnd)
+    ).length;
+  }
+
+  int getErrorCount() {
+    return logs.where((log) => log.level == LogLevel.error).length;
+  }
+
+  int getSuccessCount() {
+    return logs.where((log) => log.level == LogLevel.success).length;
+  }
+
+  int getLogCountForCategory(String category) {
+    return logs.where((log) => log.category.toLowerCase() == category.toLowerCase()).length;
+  }
+
   void _applyFilters() {
     List<LogEntry> filtered = List.from(logs);
 

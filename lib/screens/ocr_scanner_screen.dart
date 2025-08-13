@@ -105,86 +105,166 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     }
   }
 
-  // --- New: Fuzzy match, quantity pad, and submit workflow ---
+  // --- Enhanced: Fuzzy match, quantity pad, and submit workflow ---
   Future<void> _showBatchMatchAndSubmitFlow() async {
     final batchProvider = Provider.of<BatchProvider>(context, listen: false);
+    final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
     final apiService = ApiService();
-    final sessionId = batchProvider.currentSessionId ?? 'unknown';
     
-    // For demo, extract batch/expiry from first line containing 'batch' and 'exp'
-    String? extractedBatch;
-    String? extractedExpiry;
-    for (final line in _extractedLines) {
-      if (extractedBatch == null && line.toLowerCase().contains('batch')) {
-        final match = RegExp(r'([A-Za-z0-9\-]+)').firstMatch(line);
-        if (match != null) extractedBatch = match.group(1);
-      }
-      if (extractedExpiry == null && line.toLowerCase().contains('exp')) {
-        final match = RegExp(r'(\d{2}/\d{4}|\d{2}/\d{2}/\d{4}|\d{4}-\d{2}-\d{2})').firstMatch(line);
-        if (match != null) extractedExpiry = match.group(1);
-      }
-    }
-    
-    if (extractedBatch == null) {
-      _showInfoDialog('No batch number found in extracted text.');
+    if (!batchProvider.hasSession) {
+      _showInfoDialog('No active session. Please scan a QR code first.');
       return;
     }
     
-    final matches = _ocrService.findBestBatchMatches(
-      extractedBatch: extractedBatch,
-      extractedExpiry: extractedExpiry,
-      batches: batchProvider.batches,
+    // Show processing dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Expanded(
+              child: Text('Processing and matching batch information...'),
+            ),
+          ],
+        ),
+      ),
     );
     
-    if (matches.isEmpty) {
-      _showInfoDialog('No matching batch found.');
-      return;
-    }
-    
-    final bestMatch = matches.first;
-    final batch = bestMatch.batch;
-    final confidence = (bestMatch.similarity * 100).toInt();
-    
-    // Ask user to confirm and enter quantity
-    final quantity = await _showQuantityPad();
-    if (quantity == null) return;
-    
-    // Call API to submit
-    final resp = await apiService.submitMobileBatch(
-      sessionId: sessionId,
-      batchNumber: batch.batchNumber ?? batch.batchId ?? '',
-      quantity: quantity,
-      captureId: DateTime.now().millisecondsSinceEpoch.toString(),
-      confidence: confidence,
-      matchType: bestMatch.similarity == 1.0 ? 'exact' : 'fuzzy',
-      submitTimestamp: DateTime.now().millisecondsSinceEpoch,
-      extractedText: _extractedText ?? '',
-      selectedFromOptions: true,
-      alternativeMatches: matches.length > 1 ? matches.skip(1).map((m) => (m.batch.batchNumber ?? m.batch.batchId ?? '').toString()).toList() : [],
-    );
-    
-    if (resp.isSuccess) {
-      _showInfoDialog('Batch submitted successfully!');
-    } else {
-      _showInfoDialog('Failed to submit batch: \n${resp.message ?? 'Unknown error'}');
+    try {
+      // Extract batch information from OCR text
+      String? extractedBatch;
+      String? extractedExpiry;
+      
+      final text = _extractedText?.toUpperCase() ?? '';
+      loggingProvider.logOCR('Starting batch extraction from text: ${text.length} characters');
+      
+      // Enhanced batch number extraction patterns
+      final batchPatterns = [
+        RegExp(r'BATCH[:\s]*([A-Z0-9\-_]+)', caseSensitive: false),
+        RegExp(r'LOT[:\s]*([A-Z0-9\-_]+)', caseSensitive: false),
+        RegExp(r'B[:\s]*([A-Z0-9\-_]{3,})', caseSensitive: false),
+        RegExp(r'([A-Z0-9\-_]{4,})'), // Generic pattern for batch-like strings
+      ];
+      
+      for (final pattern in batchPatterns) {
+        final match = pattern.firstMatch(text);
+        if (match != null && match.group(1) != null) {
+          extractedBatch = match.group(1)!.trim();
+          break;
+        }
+      }
+      
+      // Enhanced expiry date extraction
+      final expiryPatterns = [
+        RegExp(r'EXP[:\s]*(\d{2}[\/\-]\d{2}[\/\-]\d{4})', caseSensitive: false),
+        RegExp(r'EXPIRY[:\s]*(\d{2}[\/\-]\d{2}[\/\-]\d{4})', caseSensitive: false),
+        RegExp(r'(\d{2}[\/\-]\d{2}[\/\-]\d{4})'),
+        RegExp(r'(\d{4}[\/\-]\d{2}[\/\-]\d{2})'),
+        RegExp(r'(\d{2}[\/\-]\d{4})'), // MM/YYYY format
+      ];
+      
+      for (final pattern in expiryPatterns) {
+        final match = pattern.firstMatch(text);
+        if (match != null) {
+          extractedExpiry = match.group(1);
+          break;
+        }
+      }
+      
+      // Close processing dialog
+      Navigator.of(context).pop();
+      
+      if (extractedBatch == null) {
+        _showInfoDialog('No batch number found in extracted text. Please try a clearer image or manual entry.');
+        return;
+      }
+      
+      loggingProvider.logOCR('Extracted batch info', 
+        extractedText: 'Batch: $extractedBatch, Expiry: $extractedExpiry');
+      
+      // Find matching batches using fuzzy logic
+      final matches = _ocrService.findBestBatchMatches(
+        extractedBatch: extractedBatch,
+        extractedExpiry: extractedExpiry,
+        batches: batchProvider.batches,
+        similarityThreshold: 0.75,
+      );
+      
+      batchProvider.incrementScanCount();
+      
+      if (matches.isEmpty) {
+        // Show manual selection dialog with top 2 closest matches
+        await _showManualBatchSelection(extractedBatch, extractedExpiry);
+        return;
+      }
+      
+      final bestMatch = matches.first;
+      final batch = bestMatch.batch;
+      final confidence = (bestMatch.similarity * 100).toInt();
+      
+      loggingProvider.logSuccess('Batch match found: ${batch.batchNumber ?? batch.batchId}, Confidence: $confidence%');
+      
+      // Show confirmation and get quantity
+      final confirmed = await _showBatchConfirmationDialog(batch, confidence, bestMatch.similarity == 1.0);
+      if (!confirmed) return;
+      
+      final quantity = await _showQuantityPad();
+      if (quantity == null) return;
+      
+      // Submit to API
+      await _submitBatch(
+        batch: batch,
+        quantity: quantity,
+        confidence: confidence,
+        matchType: bestMatch.similarity == 1.0 ? 'exact' : 'fuzzy',
+        extractedText: _extractedText ?? '',
+        alternativeMatches: matches.length > 1 
+          ? matches.skip(1).map((m) => (m.batch.batchNumber ?? m.batch.batchId ?? '').toString()).toList() 
+          : [],
+      );
+      
+    } catch (e, stackTrace) {
+      // Close processing dialog if still open
+      if (Navigator.canPop(context)) Navigator.of(context).pop();
+      
+      loggingProvider.logError('Batch matching failed', error: e, stackTrace: stackTrace);
+      batchProvider.incrementErrorCount();
+      _showInfoDialog('Failed to process batch: ${e.toString()}');
     }
   }
 
   Future<int?> _showQuantityPad() async {
     int? result;
     final controller = TextEditingController();
-    await showDialog(
+    
+    final confirmed = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Enter Quantity'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(hintText: 'Quantity'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Please enter the batch quantity:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Enter quantity',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.inventory),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
@@ -192,7 +272,11 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
               final val = int.tryParse(controller.text);
               if (val != null && val > 0) {
                 result = val;
-                Navigator.of(context).pop();
+                Navigator.of(context).pop(true);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a valid quantity')),
+                );
               }
             },
             child: const Text('Submit'),
@@ -200,7 +284,210 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
         ],
       ),
     );
-    return result;
+    
+    return confirmed == true ? result : null;
+  }
+
+  Future<bool> _showBatchConfirmationDialog(dynamic batch, int confidence, bool isExact) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              isExact ? Icons.check_circle : Icons.search,
+              color: isExact ? Colors.green : Colors.orange,
+            ),
+            const SizedBox(width: 8),
+            Text(isExact ? 'Exact Match' : 'Fuzzy Match'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Batch Number: ${batch.batchNumber ?? batch.batchId}'),
+            if (batch.itemName != null)
+              Text('Item: ${batch.itemName}'),
+            if (batch.expiryDate != null)
+              Text('Expiry: ${batch.expiryDate}'),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isExact ? Colors.green.shade50 : Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isExact ? Colors.green.shade200 : Colors.orange.shade200,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.analytics,
+                    color: isExact ? Colors.green.shade700 : Colors.orange.shade700,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Confidence: $confidence%',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isExact ? Colors.green.shade700 : Colors.orange.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  Future<void> _showManualBatchSelection(String extractedBatch, String? extractedExpiry) async {
+    final batchProvider = Provider.of<BatchProvider>(context, listen: false);
+    
+    // Get top 2 closest matches with lower threshold
+    final nearMatches = _ocrService.findBestBatchMatches(
+      extractedBatch: extractedBatch,
+      extractedExpiry: extractedExpiry,
+      batches: batchProvider.batches,
+      similarityThreshold: 0.5, // Lower threshold for suggestions
+    ).take(2).toList();
+    
+    dynamic selectedBatch;
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('No Exact Match Found'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Extracted: "$extractedBatch"'),
+            const SizedBox(height: 16),
+            if (nearMatches.isNotEmpty) ...[
+              const Text('Did you mean one of these?'),
+              const SizedBox(height: 12),
+              ...nearMatches.map((match) => ListTile(
+                title: Text(match.batch.batchNumber ?? match.batch.batchId ?? ''),
+                subtitle: Text('${(match.similarity * 100).toInt()}% match'),
+                onTap: () {
+                  selectedBatch = match.batch;
+                  Navigator.of(context).pop();
+                },
+              )),
+            ] else
+              const Text('No similar batches found.'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    
+    if (selectedBatch != null) {
+      final quantity = await _showQuantityPad();
+      if (quantity != null) {
+        await _submitBatch(
+          batch: selectedBatch,
+          quantity: quantity,
+          confidence: 50, // Manual selection confidence
+          matchType: 'manual',
+          extractedText: _extractedText ?? '',
+          alternativeMatches: [],
+        );
+      }
+    }
+  }
+
+  Future<void> _submitBatch({
+    required dynamic batch,
+    required int quantity,
+    required int confidence,
+    required String matchType,
+    required String extractedText,
+    required List<String> alternativeMatches,
+  }) async {
+    final batchProvider = Provider.of<BatchProvider>(context, listen: false);
+    final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
+    final apiService = ApiService();
+    
+    try {
+      final sessionId = batchProvider.currentSessionId!;
+      
+      loggingProvider.logApp('Submitting batch', 
+        data: {
+          'sessionId': sessionId,
+          'batchNumber': batch.batchNumber ?? batch.batchId,
+          'quantity': quantity,
+          'confidence': confidence,
+          'matchType': matchType,
+        });
+      
+      final resp = await apiService.submitMobileBatch(
+        sessionId: sessionId,
+        batchNumber: batch.batchNumber ?? batch.batchId ?? '',
+        quantity: quantity,
+        captureId: DateTime.now().millisecondsSinceEpoch.toString(),
+        confidence: confidence,
+        matchType: matchType,
+        submitTimestamp: DateTime.now().millisecondsSinceEpoch,
+        extractedText: extractedText,
+        selectedFromOptions: matchType != 'manual',
+        alternativeMatches: alternativeMatches,
+      );
+      
+      if (resp.isSuccess) {
+        batchProvider.incrementSuccessCount();
+        loggingProvider.logSuccess('Batch submitted successfully');
+        _showSuccessDialog('Batch submitted successfully!');
+        _resetCapture(); // Reset for next scan
+      } else {
+        batchProvider.incrementErrorCount();
+        loggingProvider.logError('Batch submission failed: ${resp.message}');
+        _showInfoDialog('Failed to submit batch: \n${resp.message ?? 'Unknown error'}');
+      }
+    } catch (e, stackTrace) {
+      batchProvider.incrementErrorCount();
+      loggingProvider.logError('Batch submission error', error: e, stackTrace: stackTrace);
+      _showInfoDialog('Failed to submit batch: ${e.toString()}');
+    }
+  }
+
+  void _showSuccessDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(
+          Icons.check_circle,
+          color: Colors.green,
+          size: 48,
+        ),
+        title: const Text('Success'),
+        content: Text(message),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showInfoDialog(String message) {
@@ -220,17 +507,95 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: _buildAppBar(),
-      body: _buildBody(),
-      bottomSheet: _buildBottomSheet(),
+    return Consumer<BatchProvider>(
+      builder: (context, batchProvider, child) {
+        // Check if session exists before showing OCR scanner
+        if (!batchProvider.hasSession) {
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('OCR Scanner'),
+              backgroundColor: Colors.black,
+              foregroundColor: Colors.white,
+            ),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.qr_code_scanner,
+                    size: 80,
+                    color: Colors.grey.shade400,
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'No Active Session',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Please scan a QR code to start a session\nbefore using the OCR scanner.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pushReplacementNamed(context, '/qr-scanner');
+                    },
+                    icon: const Icon(Icons.qr_code_scanner),
+                    label: const Text('Scan QR Code'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Scaffold(
+          backgroundColor: Colors.black,
+          appBar: _buildAppBar(),
+          body: _buildBody(),
+          bottomSheet: _buildBottomSheet(),
+        );
+      },
     );
   }
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      title: const Text('OCR Scanner'),
+      title: Consumer<BatchProvider>(
+        builder: (context, batchProvider, child) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('OCR Scanner'),
+              if (batchProvider.hasSession)
+                Text(
+                  'Session: ${batchProvider.currentSessionId}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
       backgroundColor: Colors.black,
       foregroundColor: Colors.white,
       elevation: 0,
@@ -465,7 +830,7 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Raw text
+          // Raw extracted text
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
@@ -474,49 +839,30 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.grey.shade300),
             ),
-            child: Text(
-              _extractedText!,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Extracted Text',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _extractedText!,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ),
           
-          const SizedBox(height: 16),
-          
-          // Potential batch information
-          if (_extractedLines.isNotEmpty) ...[
-            const Text(
-              'Potential Batch Information',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ..._extractedLines.map((line) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.arrow_right,
-                    size: 16,
-                    color: Colors.grey,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      line,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            )),
-          ],
-          
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           
           // Action buttons
           Row(
@@ -524,20 +870,24 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: _showBatchMatchAndSubmitFlow,
-                  icon: const Icon(Icons.inventory),
-                  label: const Text('Submit Batch'),
+                  icon: const Icon(Icons.search),
+                  label: const Text('Find & Submit Batch'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _resetCapture,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Retake'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
                 ),
               ),
             ],

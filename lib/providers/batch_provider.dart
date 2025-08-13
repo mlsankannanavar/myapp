@@ -21,6 +21,11 @@ class BatchProvider extends ChangeNotifier {
   DateTime? _lastLoadTime;
   Duration? _lastLoadDuration;
   bool _isInitialized = false;
+  
+  // Statistics
+  int _totalScans = 0;
+  int _successfulSubmissions = 0;
+  int _errorCount = 0;
 
   // Getters
   List<BatchModel> get batches => List.unmodifiable(_batches);
@@ -32,8 +37,14 @@ class BatchProvider extends ChangeNotifier {
   bool get isInitialized => _isInitialized;
   bool get isLoading => _loadingState == BatchLoadingState.loading;
   bool get hasError => _loadingState == BatchLoadingState.error;
-  bool get hasBatches => _batches.isNotEmpty;
+  bool get hasBatches => _batches.isNotEmpty && _currentSessionId != null;
+  bool get hasSession => _currentSessionId != null;
   int get batchCount => _batches.length;
+  
+  // Dynamic statistics
+  int get totalScans => _totalScans;
+  int get successfulSubmissions => _successfulSubmissions;
+  int get errorCount => _errorCount;
 
   // Filtered getters
   List<BatchModel> get expiredBatches => _batches.where((batch) => batch.isExpired).toList();
@@ -89,9 +100,86 @@ class BatchProvider extends ChangeNotifier {
     }
   }
 
+  // Clear session and batches
+  void clearSession() {
+    _batches = [];
+    _currentSessionId = null;
+    _errorMessage = null;
+    _loadingState = BatchLoadingState.idle;
+    _logger.logApp('Session cleared');
+    notifyListeners();
+  }
+
+  // Statistics methods
+  void incrementScanCount() {
+    _totalScans++;
+    _logger.logApp('Scan count incremented', data: {'totalScans': _totalScans});
+    notifyListeners();
+  }
+
+  void incrementSuccessCount() {
+    _successfulSubmissions++;
+    _logger.logApp('Success count incremented', data: {'successfulSubmissions': _successfulSubmissions});
+    notifyListeners();
+  }
+
+  void incrementErrorCount() {
+    _errorCount++;
+    _logger.logApp('Error count incremented', data: {'errorCount': _errorCount});
+    notifyListeners();
+  }
+
+  // Load batches for a specific session
+  Future<void> loadBatchesForSession(String sessionId, {bool forceRefresh = false}) async {
+    if (isLoading && !forceRefresh) {
+      _logger.logApp('Batch loading already in progress');
+      return;
+    }
+
+    _setLoadingState(BatchLoadingState.loading);
+    _clearError();
+    _currentSessionId = sessionId;
+
+    final stopwatch = Stopwatch()..start();
+
+    try {
+      _logger.logApp('Loading batches for session', data: {'sessionId': sessionId});
+
+      final response = await _apiService.getFilteredBatches(sessionId);
+      
+      if (response.isSuccess && response.data != null) {
+        _batches = response.data!;
+        _lastLoadTime = DateTime.now();
+        _lastLoadDuration = stopwatch.elapsed;
+        
+        // Cache the batches
+        await _cacheBatches();
+        
+        _setLoadingState(BatchLoadingState.loaded);
+        _logger.logApp('Batches loaded successfully',
+            data: {
+              'sessionId': sessionId,
+              'count': _batches.length,
+              'duration': _lastLoadDuration!.inMilliseconds,
+            });
+      } else {
+        _setErrorMessage(response.message ?? 'Failed to load batches');
+        _setLoadingState(BatchLoadingState.error);
+        _logger.logError('Failed to load batches: ${response.message}');
+      }
+    } catch (e, stackTrace) {
+      _setErrorMessage('Network error: $e');
+      _setLoadingState(BatchLoadingState.error);
+      _logger.logError('Batch loading error', error: e, stackTrace: stackTrace);
+    } finally {
+      stopwatch.stop();
+      notifyListeners();
+    }
+  }
+
   // Search batches
   List<BatchModel> searchBatches(String query) {
-    if (query.isEmpty) return batches;
+    if (query.isEmpty) return _batches;
 
     final lowerQuery = query.toLowerCase();
     return _batches.where((batch) {
@@ -533,65 +621,6 @@ class BatchProvider extends ChangeNotifier {
     final sessionId = _currentSessionId ?? _generateSessionId();
     _currentSessionId ??= sessionId;
     await loadBatchesForSession(sessionId);
-  }
-
-  // Renamed original method to avoid conflict
-  Future<void> loadBatchesForSession(String sessionId, {bool forceRefresh = false}) async {
-    if (_currentSessionId == sessionId && !forceRefresh && _batches.isNotEmpty) {
-      _logger.logApp('Using cached batches for session',
-          additionalData: {'sessionId': sessionId, 'count': _batches.length});
-      return;
-    }
-
-    _setLoadingState(BatchLoadingState.loading);
-    _currentSessionId = sessionId;
-
-    try {
-      final stopwatch = Stopwatch()..start();
-
-      // Load from API
-      final response = await _apiService.getBatches(sessionId);
-      stopwatch.stop();
-
-      if (response.isSuccess && response.data != null) {
-        _batches = response.data!;
-        _lastLoadTime = DateTime.now();
-        _lastLoadDuration = stopwatch.elapsed;
-
-        // Save to local storage
-        await _saveBatchesToLocal();
-
-        _setLoadingState(BatchLoadingState.loaded);
-        _logger.logApp('Batches loaded successfully from API',
-            additionalData: {
-              'sessionId': sessionId,
-              'count': _batches.length,
-              'duration': stopwatch.elapsed.inMilliseconds,
-            });
-      } else {
-        // Fallback to cached data
-        await _loadCachedBatches();
-        _setErrorMessage(response.message ?? 'Failed to load batches');
-        _setLoadingState(BatchLoadingState.error);
-        
-        _logger.logWarning('Failed to load batches from API, using cached data',
-            additionalData: {
-              'sessionId': sessionId,
-              'cachedCount': _batches.length,
-              'error': response.message,
-            });
-      }
-    } catch (e, stackTrace) {
-      await _loadCachedBatches();
-      _setErrorMessage(e.toString());
-      _setLoadingState(BatchLoadingState.error);
-      
-      _logger.logError('Exception while loading batches',
-          error: e,
-          stackTrace: stackTrace);
-    }
-
-    notifyListeners();
   }
 
   // Generate session ID

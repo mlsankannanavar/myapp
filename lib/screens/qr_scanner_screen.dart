@@ -398,15 +398,33 @@ class _QRScannerScreenState extends State<QRScannerScreen>
     try {
       loggingProvider.logQRScan('QR code detected', qrData: qrCode);
 
-      // Process the QR code directly
-      await batchProvider.processBatch(qrCode);
+      // Extract session ID from QR code (assuming QR contains session ID)
+      String sessionId = qrCode.trim();
       
-      loggingProvider.logSuccess('QR code processed successfully');
+      // If QR code contains a URL, extract session ID from it
+      if (qrCode.contains('sessionId=')) {
+        final uri = Uri.tryParse(qrCode);
+        if (uri != null) {
+          sessionId = uri.queryParameters['sessionId'] ?? qrCode;
+        }
+      } else if (qrCode.contains('/')) {
+        // If it's a path like /session/ABC123, extract the last part
+        final parts = qrCode.split('/');
+        sessionId = parts.last;
+      }
       
-      // Show success dialog
-      _showSuccessDialog(qrCode);
+      loggingProvider.logApp('Extracted session ID: $sessionId');
+      
+      // Load batches for this session
+      await batchProvider.loadBatchesForSession(sessionId);
+      
+      loggingProvider.logSuccess('Session loaded successfully');
+      
+      // Show success dialog and navigate
+      _showSuccessDialog(sessionId);
     } catch (e) {
       loggingProvider.logError('QR scan error: $e', stackTrace: StackTrace.current);
+      batchProvider.incrementErrorCount();
       _showErrorDialog('Failed to process QR code: $e');
     } finally {
       if (mounted) {
@@ -454,54 +472,76 @@ class _QRScannerScreenState extends State<QRScannerScreen>
     }
   }
 
-  void _showSuccessDialog(dynamic batchData) {
+  void _showSuccessDialog(String sessionId) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        icon: const Icon(
-          Icons.check_circle,
-          color: Colors.green,
-          size: 48,
-        ),
-        title: const Text('QR Code Scanned'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Batch information retrieved successfully'),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'Batch: ${batchData.toString()}',
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 12,
-                ),
-              ),
+      builder: (context) => Consumer<BatchProvider>(
+        builder: (context, batchProvider, child) {
+          return AlertDialog(
+            icon: const Icon(
+              Icons.check_circle,
+              color: Colors.green,
+              size: 48,
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              // Continue scanning
-            },
-            child: const Text('Scan Another'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop(); // Return to previous screen
-            },
-            child: const Text('Done'),
-          ),
-        ],
+            title: const Text('Session Started'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('QR code scanned successfully!'),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Session ID: $sessionId',
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Batches loaded: ${batchProvider.batchCount}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.green,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pushReplacementNamed('/home');
+                },
+                child: const Text('View Dashboard'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pushReplacementNamed('/ocr-scanner');
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                ),
+                child: const Text('Start Scanning Batches'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
