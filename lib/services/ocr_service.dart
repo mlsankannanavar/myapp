@@ -586,19 +586,22 @@ class OcrService extends ChangeNotifier {
         return true;
       }
       
-      // Normalize date formats and compare
-      final extractedDate = _parseDate(extractedExpiry);
-      final batchDate = _parseDate(batchExpiry);
+      // Parse both dates with comprehensive format support
+      final extractedDate = _parseAnyDateFormat(extractedExpiry);
+      final batchDate = _parseAnyDateFormat(batchExpiry);
       
       if (extractedDate == null || batchDate == null) {
         _logger.logOcr('EXPIRY_CHECK: Could not parse dates - assuming valid');
+        _logger.logOcr('EXPIRY_PARSE_FAIL: Extracted: "$extractedExpiry" → $extractedDate, Batch: "$batchExpiry" → $batchDate');
         return true;
       }
       
       final daysDifference = batchDate.difference(extractedDate).inDays.abs();
       final isValid = daysDifference <= 30; // Allow 30 days difference
       
+      _logger.logOcr('EXPIRY_CHECK: Parsed dates - Extracted: ${DateFormat('yyyy-MM-dd').format(extractedDate)}, Batch: ${DateFormat('yyyy-MM-dd').format(batchDate)}');
       _logger.logOcr('EXPIRY_CHECK: Date difference: $daysDifference days, Valid: $isValid');
+      
       return isValid;
       
     } catch (e) {
@@ -607,27 +610,150 @@ class OcrService extends ChangeNotifier {
     }
   }
 
-  // Helper method to parse dates in various formats
-  DateTime? _parseDate(String dateStr) {
+  // Comprehensive date parser supporting ALL possible formats
+  DateTime? _parseAnyDateFormat(String dateStr) {
+    if (dateStr.isEmpty) return null;
+    
     try {
-      // Try various date formats
-      final formats = [
-        'dd/MM/yyyy',
-        'MM/yyyy', 
-        'yyyy-MM-dd',
-        'dd-MM-yyyy',
-        'MMM yyyy',
-        'MMM-yyyy'
+      _logger.logOcr('DATE_PARSE_START: Attempting to parse "$dateStr"');
+      
+      // Clean the input
+      String cleanDate = dateStr.trim().replaceAll(RegExp(r'[^\w\-/.]'), ' ').trim();
+      _logger.logOcr('DATE_PARSE_CLEAN: Cleaned to "$cleanDate"');
+      
+      // Comprehensive list of date formats to try
+      final dateFormats = [
+        // DD/MM/YYYY variants
+        'dd/MM/yyyy', 'dd/MM/yy', 'd/M/yyyy', 'd/M/yy',
+        'dd.MM.yyyy', 'dd.MM.yy', 'd.M.yyyy', 'd.M.yy',
+        'dd-MM-yyyy', 'dd-MM-yy', 'd-M-yyyy', 'd-M-yy',
+        
+        // MM/DD/YYYY variants (US format)
+        'MM/dd/yyyy', 'MM/dd/yy', 'M/d/yyyy', 'M/d/yy',
+        'MM.dd.yyyy', 'MM.dd.yy', 'M.d.yyyy', 'M.d.yy',
+        'MM-dd-yyyy', 'MM-dd-yy', 'M-d-yyyy', 'M-d-yy',
+        
+        // YYYY-MM-DD variants (ISO format)
+        'yyyy-MM-dd', 'yyyy-M-d', 'yyyy/MM/dd', 'yyyy/M/d',
+        'yyyy.MM.dd', 'yyyy.M.d',
+        
+        // YYYY-DD-MM variants
+        'yyyy-dd-MM', 'yyyy-d-M', 'yyyy/dd/MM', 'yyyy/d/M',
+        
+        // Month year only formats
+        'MM/yyyy', 'M/yyyy', 'MM-yyyy', 'M-yyyy', 'MM.yyyy', 'M.yyyy',
+        'MMM yyyy', 'MMM-yyyy', 'MMM.yyyy', 'MMM/yyyy',
+        'MMMM yyyy', 'MMMM-yyyy', 'MMMM.yyyy', 'MMMM/yyyy',
+        
+        // DD MMM YYYY formats
+        'dd MMM yyyy', 'd MMM yyyy', 'dd-MMM-yyyy', 'd-MMM-yyyy',
+        'dd.MMM.yyyy', 'd.MMM.yyyy', 'dd/MMM/yyyy', 'd/MMM/yyyy',
+        
+        // MMM DD YYYY formats
+        'MMM dd yyyy', 'MMM d yyyy', 'MMM-dd-yyyy', 'MMM-d-yyyy',
+        'MMM.dd.yyyy', 'MMM.d.yyyy', 'MMM/dd/yyyy', 'MMM/d/yyyy',
+        
+        // Compact formats
+        'ddMMyyyy', 'ddMMyy', 'yyyyMMdd', 'yyyyddMM', 'MMddyyyy',
+        
+        // Edge cases
+        'yyyy', 'yy'
       ];
       
-      for (final format in formats) {
+      // Try each format
+      for (String format in dateFormats) {
         try {
-          return DateFormat(format).parse(dateStr);
+          final formatter = DateFormat(format);
+          final parsedDate = formatter.parseStrict(cleanDate);
+          
+          _logger.logOcr('DATE_PARSE_SUCCESS: "$cleanDate" parsed as ${DateFormat('yyyy-MM-dd').format(parsedDate)} using format "$format"');
+          return parsedDate;
+          
         } catch (e) {
+          // Continue to next format
           continue;
         }
       }
+      
+      // Try manual parsing for irregular formats
+      final manualParsed = _tryManualDateParsing(cleanDate);
+      if (manualParsed != null) {
+        _logger.logOcr('DATE_PARSE_MANUAL: "$cleanDate" parsed manually as ${DateFormat('yyyy-MM-dd').format(manualParsed)}');
+        return manualParsed;
+      }
+      
+      _logger.logOcr('DATE_PARSE_FAILED: Could not parse "$dateStr" with any known format');
       return null;
+      
+    } catch (e) {
+      _logger.logOcr('DATE_PARSE_ERROR: Exception parsing "$dateStr" - $e');
+      return null;
+    }
+  }
+  
+  // Manual parsing for irregular date formats
+  DateTime? _tryManualDateParsing(String dateStr) {
+    try {
+      // Extract numbers from string
+      final numbers = RegExp(r'\d+').allMatches(dateStr).map((m) => int.parse(m.group(0)!)).toList();
+      
+      if (numbers.isEmpty) return null;
+      
+      // Single number - assume year
+      if (numbers.length == 1) {
+        int year = numbers[0];
+        if (year < 100) year += 2000; // Convert 2-digit year
+        if (year < 2000 || year > 2100) return null;
+        return DateTime(year, 12, 31); // End of year
+      }
+      
+      // Two numbers - assume month/year
+      if (numbers.length == 2) {
+        int first = numbers[0];
+        int second = numbers[1];
+        
+        // Try MM/YYYY
+        if (first <= 12 && second > 31) {
+          int year = second < 100 ? second + 2000 : second;
+          return DateTime(year, first, DateTime(year, first + 1, 0).day); // Last day of month
+        }
+        
+        // Try YYYY/MM  
+        if (first > 31 && second <= 12) {
+          int year = first < 100 ? first + 2000 : first;
+          return DateTime(year, second, DateTime(year, second + 1, 0).day); // Last day of month
+        }
+      }
+      
+      // Three numbers - assume DD/MM/YYYY or MM/DD/YYYY or YYYY/MM/DD
+      if (numbers.length == 3) {
+        int first = numbers[0];
+        int second = numbers[1];
+        int third = numbers[2];
+        
+        // Convert 2-digit years
+        if (third < 100) third += 2000;
+        if (first > 1900 && first < 2100) first = first; // Already 4-digit
+        if (second > 1900 && second < 2100) second = second; // Already 4-digit
+        
+        // Try YYYY/MM/DD
+        if (first > 1900 && first < 2100 && second <= 12 && third <= 31) {
+          return DateTime(first, second, third);
+        }
+        
+        // Try DD/MM/YYYY
+        if (third > 1900 && third < 2100 && second <= 12 && first <= 31) {
+          return DateTime(third, second, first);
+        }
+        
+        // Try MM/DD/YYYY
+        if (third > 1900 && third < 2100 && first <= 12 && second <= 31) {
+          return DateTime(third, first, second);
+        }
+      }
+      
+      return null;
+      
     } catch (e) {
       return null;
     }
