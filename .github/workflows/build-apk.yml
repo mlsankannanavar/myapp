@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     
     env:
       FLUTTER_ROOT: /opt/hostedtoolcache/flutter/stable-3.24.0-x64
@@ -64,15 +64,11 @@ jobs:
       run: flutter doctor -v
         
     - name: Accept Android licenses
-      run: |
-        yes | flutter doctor --android-licenses || true
-        sdkmanager --licenses || true
+      run: yes | flutter doctor --android-licenses
       continue-on-error: true
         
     - name: Get Flutter dependencies
-      run: |
-        flutter pub get --verbose
-        flutter pub deps
+      run: flutter pub get
       
     - name: Run Flutter analyze
       run: flutter analyze --no-fatal-infos --no-fatal-warnings
@@ -82,14 +78,11 @@ jobs:
       run: flutter test --no-pub
       continue-on-error: true
       
-    - name: Clean and Build APK (Debug)
-      run: |
-        flutter clean
-        flutter pub get
-        flutter build apk --debug --verbose
+    - name: Build APK (Debug)
+      run: flutter build apk --debug
       
     - name: Build APK (Release)
-      run: flutter build apk --release --verbose
+      run: flutter build apk --release
       
     - name: Build App Bundle (Release)
       run: flutter build appbundle --release
