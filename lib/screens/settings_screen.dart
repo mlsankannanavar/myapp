@@ -396,7 +396,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           children: [
             Image.asset(
-              'assets/icons/app_icon.png',
+              'assets/logo/icon.png',
               width: 64,
               height: 64,
               errorBuilder: (context, error, stackTrace) => const Icon(
@@ -899,10 +899,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       applicationName: 'BatchMate',
       applicationVersion: '1.0.0',
-      applicationIcon: const Icon(
-        Icons.medical_services,
-        size: 48,
-        color: AppColors.primary,
+      applicationIcon: Image.asset(
+        'assets/logo/icon.png',
+        width: 48,
+        height: 48,
+        errorBuilder: (context, error, stackTrace) => const Icon(
+          Icons.medical_services,
+          size: 48,
+          color: AppColors.primary,
+        ),
       ),
       children: [
         const Text(

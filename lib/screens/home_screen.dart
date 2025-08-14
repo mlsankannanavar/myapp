@@ -134,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             child: Padding(
               padding: const EdgeInsets.all(4),
               child: Image.asset(
-                'logo/icon.png',
+                'assets/logo/icon.png',
                 fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) {
                   return Icon(Icons.medical_services, size: 24, color: AppColors.primary);
