@@ -226,18 +226,17 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     ) ?? false;
   }
 
-  Future<bool> _showExpiryMismatchConfirmationDialog(dynamic batch, int confidence) async {
-    return await showDialog<bool>(
+  Future<void> _showNearestMatchesDialog(List<dynamic> nearestMatches, String extractedText) async {
+    dynamic selectedBatch;
+    
+    await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            Icon(
-              Icons.warning,
-              color: Colors.red,
-            ),
+            Icon(Icons.search, color: Colors.orange),
             const SizedBox(width: 8),
-            Text('Expiry Date Mismatch'),
+            Text('No Exact Match Found'),
           ],
         ),
         content: Column(
@@ -247,189 +246,71 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.warning, color: Colors.red.shade700, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'High Confidence Batch Match Found',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red.shade700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'The scanned batch number has high similarity ($confidence%), but the expiry date from the label doesn\'t match the expected expiry date for this batch.',
-                    style: TextStyle(color: Colors.red.shade700),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text('Batch Match Details:', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.inventory_2, color: Colors.blue, size: 16),
-                      const SizedBox(width: 4),
-                      Text('Batch Number: ', style: TextStyle(fontWeight: FontWeight.w500)),
-                      Text('${batch.batchNumber ?? batch.batchId}'),
-                    ],
-                  ),
-                  if (batch.itemName != null) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.medication, color: Colors.green, size: 16),
-                        const SizedBox(width: 4),
-                        Text('Item: ', style: TextStyle(fontWeight: FontWeight.w500)),
-                        Expanded(child: Text('${batch.itemName}')),
-                      ],
-                    ),
-                  ],
-                  if (batch.expiryDate != null) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.calendar_today, color: Colors.orange, size: 16),
-                        const SizedBox(width: 4),
-                        Text('Expected Expiry: ', style: TextStyle(fontWeight: FontWeight.w500)),
-                        Text('${batch.expiryDate}'),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
                 color: Colors.orange.shade50,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.orange.shade200),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.analytics, color: Colors.orange.shade700),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Batch Similarity: $confidence%',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.orange.shade700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade300),
-              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.info, color: Colors.amber.shade700, size: 18),
+                      Icon(Icons.info, color: Colors.orange.shade700, size: 18),
                       const SizedBox(width: 8),
                       Text(
-                        'Important Safety Notice',
+                        'Batch + Expiry Validation',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.amber.shade700,
+                          color: Colors.orange.shade700,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Pharmaceutical expiry dates are critical for patient safety. Please verify the batch details carefully before proceeding.',
-                    style: TextStyle(
-                      color: Colors.amber.shade800,
-                      fontSize: 13,
-                    ),
+                    'No batch was found with BOTH matching batch number (75%+) AND exact expiry date in the scanned text.',
+                    style: TextStyle(color: Colors.orange.shade800, fontSize: 13),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              'Do you want to proceed with this batch despite the expiry date mismatch?',
-              style: TextStyle(fontWeight: FontWeight.w500),
+              'Extracted text: "${extractedText.length > 50 ? extractedText.substring(0, 50) + '...' : extractedText}"',
+              style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey.shade600),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Proceed Anyway'),
-          ),
-        ],
-      ),
-    ) ?? false;
-  }
-
-  Future<void> _showManualBatchSelection(List<dynamic> nearestMatches, String extractedText) async {
-    dynamic selectedBatch;
-    
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('No Exact Match Found'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Extracted text: "${extractedText.length > 50 ? extractedText.substring(0, 50) + '...' : extractedText}"'),
             const SizedBox(height: 16),
-            if (nearestMatches.isNotEmpty) ...[
-              const Text('Did you mean one of these?'),
-              const SizedBox(height: 12),
-              ...nearestMatches.map((match) => ListTile(
-                title: Text(match.batch.batchNumber ?? match.batch.batchId ?? ''),
-                subtitle: Text('${(match.similarity * 100).toInt()}% match'),
-                onTap: () {
-                  selectedBatch = match.batch;
-                  Navigator.of(context).pop();
-                },
-              )),
-            ] else
-              const Text('No similar batches found.'),
+            Text('Do you want to proceed with any of these nearest matches?', 
+                style: TextStyle(fontWeight: FontWeight.w500)),
+            const SizedBox(height: 12),
+            ...nearestMatches.map((match) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Card(
+                elevation: 1,
+                child: ListTile(
+                  leading: Icon(Icons.inventory_2, color: Colors.blue, size: 20),
+                  title: Text(
+                    match.batch.batchNumber ?? match.batch.batchId ?? 'Unknown',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (match.batch.itemName != null)
+                        Text('Item: ${match.batch.itemName}', style: TextStyle(fontSize: 12)),
+                      if (match.batch.expiryDate != null)
+                        Text('Expiry: ${match.batch.expiryDate}', style: TextStyle(fontSize: 12, color: Colors.red.shade600)),
+                      Text('Similarity: ${(match.similarity * 100).toInt()}%', 
+                          style: TextStyle(fontSize: 11, color: Colors.orange.shade700)),
+                    ],
+                  ),
+                  onTap: () {
+                    selectedBatch = match.batch;
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ),
+            )),
           ],
         ),
         actions: [
@@ -499,7 +380,7 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
         // Add to submitted batches list
         await batchProvider.addSubmittedBatch(
           batchNumber: batch.batchNumber ?? batch.batchId ?? '',
-          itemName: batch.productName ?? 'Unknown Item',
+          itemName: batch.itemName ?? batch.productName ?? 'Unknown Item',
           quantity: quantity.toString(),
           capturedImage: _lastCapturedImageBytes,
         );
@@ -1120,53 +1001,39 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
 
       batchProvider.incrementScanCount();
 
-      // Handle matching results automatically
+      // Handle matching results with new logic
       if (matches.isNotEmpty) {
         final bestMatch = matches.first;
         final batch = bestMatch.batch;
         final confidence = (bestMatch.similarity * 100).toInt();
         
-        // Check if this is a high-confidence match with expiry mismatch
-        if (!bestMatch.expiryValid) {
-          loggingProvider.logWarning('High confidence batch match found but expiry date mismatch: ${batch.batchNumber ?? batch.batchId}, Confidence: $confidence%');
+        if (bestMatch.expiryValid) {
+          // Exact match: both batch number and expiry date found
+          loggingProvider.logSuccess('Exact match found: ${batch.batchNumber ?? batch.batchId}, Confidence: $confidence% (batch + expiry confirmed)');
           
-          // Show expiry confirmation dialog
-          final confirmed = await _showExpiryMismatchConfirmationDialog(batch, confidence);
-          if (!confirmed) {
-            // User rejected, show manual selection if other options available
-            if (nearestMatches.isNotEmpty) {
-              await _showManualBatchSelection(nearestMatches, extractedText);
-            } else {
-              _showInfoDialog('Batch match found but expiry date doesn\'t match. Please verify manually.');
-            }
-            return;
-          }
-          // User confirmed, proceed with submission
+          // Show confirmation and get quantity
+          final confirmed = await _showBatchConfirmationDialog(batch, confidence, bestMatch.similarity >= 0.99);
+          if (!confirmed) return;
+
+          final quantity = await _showQuantityPad();
+          if (quantity == null) return;
+
+          // Submit to API
+          await _submitBatch(
+            batch: batch,
+            quantity: quantity,
+            confidence: confidence,
+            matchType: 'exact', // Always exact since both batch and expiry matched
+            extractedText: extractedText,
+            alternativeMatches: matches.length > 1 
+              ? matches.skip(1).map((m) => (m.batch.batchNumber ?? m.batch.batchId ?? '').toString()).toList() 
+              : [],
+          );
+        } else {
+          // Nearest matches (no exact expiry match) - show user options
+          loggingProvider.logWarning('No exact matches found. Showing ${matches.length} nearest matches for user decision');
+          await _showNearestMatchesDialog(matches, extractedText);
         }
-        
-        loggingProvider.logSuccess('Batch match found: ${batch.batchNumber ?? batch.batchId}, Confidence: $confidence%');
-        
-        // Show confirmation and get quantity
-        final confirmed = await _showBatchConfirmationDialog(batch, confidence, bestMatch.similarity >= 0.99);
-        if (!confirmed) return;
-
-        final quantity = await _showQuantityPad();
-        if (quantity == null) return;
-
-        // Submit to API
-        await _submitBatch(
-          batch: batch,
-          quantity: quantity,
-          confidence: confidence,
-          matchType: bestMatch.similarity >= 0.99 ? 'exact' : 'fuzzy',
-          extractedText: extractedText,
-          alternativeMatches: matches.length > 1 
-            ? matches.skip(1).map((m) => (m.batch.batchNumber ?? m.batch.batchId ?? '').toString()).toList() 
-            : [],
-        );
-      } else if (nearestMatches.isNotEmpty) {
-        // No exact matches, show nearest options
-        await _showManualBatchSelection(nearestMatches, extractedText);
       } else {
         // No matches at all
         _showInfoDialog('No matching batches found. Please verify the text extraction or try manual entry.');

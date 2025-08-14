@@ -483,232 +483,225 @@ class OcrService extends ChangeNotifier {
     }
   }
 
-  /// Enhanced fuzzy batch matching: searches for batch numbers within the extracted text
-  /// Returns a list of matches with similarity >= [similarityThreshold] and valid expiry
+  /// Enhanced batch matching: searches for each batch number individually in extracted text
+  /// Returns matches only if BOTH batch number (75%+ similarity) AND exact expiry date found
   List<BatchMatchResult> findBestBatchMatches({
     required String extractedText,
     required List<dynamic> batches, // List<BatchModel> or Map
     double similarityThreshold = 0.75,
   }) {
-    final List<BatchMatchResult> results = [];
-    final List<BatchMatchResult> expiryMismatchResults = [];
+    final List<BatchMatchResult> exactMatches = [];
+    final List<BatchMatchResult> nearestMatches = [];
     final normalizedText = extractedText.trim().toUpperCase();
     
-    _logger.logOcr('MATCH_START: Beginning batch matching process');
-    _logger.logOcr('MATCH_INPUT_BATCH: Extracted text: "$extractedText"');
+    _logger.logOcr('MATCH_START: Beginning new batch matching process');
+    _logger.logOcr('MATCH_INPUT_TEXT: Extracted text: "$extractedText"');
     _logger.logOcr('MATCH_AVAILABLE_BATCHES: ${batches.length} batches available for matching');
 
-    // Extract potential expiry dates from the text
-    String? extractedExpiry = _extractExpiryFromText(normalizedText);
-    _logger.logOcr('MATCH_INPUT_EXPIRY: Extracted expiry: "${extractedExpiry ?? "null"}"');
-    
     for (final batch in batches) {
       final batchNumber = (batch.batchNumber ?? batch.batchId ?? '').toString().trim().toUpperCase();
       if (batchNumber.isEmpty) continue;
 
-      // Check if the batch number is contained within the extracted text using fuzzy matching
-      double bestSim = _findBatchInText(batchNumber, normalizedText);
+      // Step 1: Check if batch number exists in text with fuzzy matching
+      final batchSimilarity = _findBatchNumberInText(batchNumber, normalizedText);
       
-      // Expiry validation (if extractedExpiry is present and batch has expiry)
-      bool expiryValid = true;
-      if (extractedExpiry != null && batch.expiryDate != null) {
-        expiryValid = _compareExpiryDates(extractedExpiry, batch.expiryDate.toString());
-        _logger.logOcr('Expiry validation for ${batchNumber}: extracted="$extractedExpiry", batch="${batch.expiryDate}", valid=$expiryValid');
-      }
-
-      // Add to appropriate results list based on similarity and expiry validation
-      if (bestSim >= similarityThreshold) {
-        if (expiryValid) {
-          results.add(BatchMatchResult(
+      if (batchSimilarity >= similarityThreshold) {
+        _logger.logOcr('BATCH_FOUND: ${batchNumber} found with ${(batchSimilarity * 100).toInt()}% similarity');
+        
+        // Step 2: Check if batch expiry date exists exactly in text
+        bool expiryFound = false;
+        if (batch.expiryDate != null) {
+          expiryFound = _searchBatchExpiryInText(batch.expiryDate.toString(), extractedText);
+          _logger.logOcr('EXPIRY_CHECK: ${batch.expiryDate} ${expiryFound ? 'FOUND' : 'NOT FOUND'} in text');
+        } else {
+          // If no expiry date in batch, consider it valid
+          expiryFound = true;
+          _logger.logOcr('EXPIRY_CHECK: No expiry date in batch, considering valid');
+        }
+        
+        if (expiryFound) {
+          // Both conditions met - exact match
+          exactMatches.add(BatchMatchResult(
             batch: batch,
-            similarity: bestSim,
+            similarity: batchSimilarity,
             expiryValid: true,
           ));
-          _logger.logOcr('Match found: ${batchNumber} with similarity ${(bestSim * 100).toInt()}% and valid expiry');
+          _logger.logOcr('EXACT_MATCH: Added ${batchNumber} as exact match (batch + expiry found)');
         } else {
-          // High similarity but expiry mismatch - add to separate list for user confirmation
-          expiryMismatchResults.add(BatchMatchResult(
+          // Only batch found, not expiry - add to nearest matches
+          nearestMatches.add(BatchMatchResult(
             batch: batch,
-            similarity: bestSim,
+            similarity: batchSimilarity,
             expiryValid: false,
           ));
-          _logger.logOcr('High similarity match found with expiry mismatch: ${batchNumber} similarity ${(bestSim * 100).toInt()}%');
+          _logger.logOcr('NEAREST_MATCH: Added ${batchNumber} as nearest match (batch found, expiry missing)');
         }
+      } else {
+        // Batch similarity below threshold, but add to nearest for potential fallback
+        nearestMatches.add(BatchMatchResult(
+          batch: batch,
+          similarity: batchSimilarity,
+          expiryValid: false,
+        ));
       }
     }
     
-    // Sort both lists by similarity descending
-    results.sort((a, b) => b.similarity.compareTo(a.similarity));
-    expiryMismatchResults.sort((a, b) => b.similarity.compareTo(a.similarity));
+    // Sort exact matches by similarity (highest first)
+    exactMatches.sort((a, b) => b.similarity.compareTo(a.similarity));
     
-    // If no exact matches but have high similarity matches with expiry mismatch, add them for user decision
-    if (results.isEmpty && expiryMismatchResults.isNotEmpty) {
-      results.addAll(expiryMismatchResults);
-      _logger.logOcr('MATCH_RESULTS: No exact matches found, but ${expiryMismatchResults.length} high-similarity matches with expiry mismatch available for user confirmation');
-    } else {
-      _logger.logOcr('MATCH_RESULTS: Found ${results.length} exact matches above threshold');
+    if (exactMatches.isNotEmpty) {
+      _logger.logOcr('MATCH_RESULTS: Found ${exactMatches.length} exact matches (batch + expiry)');
+      return exactMatches;
     }
     
-    return results;
+    // No exact matches - return top 2 nearest matches for user decision
+    nearestMatches.sort((a, b) => b.similarity.compareTo(a.similarity));
+    final topNearest = nearestMatches.take(2).toList();
+    
+    _logger.logOcr('MATCH_RESULTS: No exact matches found, returning ${topNearest.length} nearest matches for user decision');
+    return topNearest;
   }
   
-  /// Find batch number within extracted text using sliding window and fuzzy matching
-  double _findBatchInText(String batchNumber, String extractedText) {
-    double bestSimilarity = 0.0;
-    final batchLength = batchNumber.length;
+  /// Simplified batch number search: check if batch number exists in text with fuzzy matching
+  /// No sliding window - just basic contains check with Levenshtein similarity
+  double _findBatchNumberInText(String batchNumber, String extractedText) {
+    _logger.logOcr('BATCH_SEARCH: Looking for "$batchNumber" in text');
     
-    // Try sliding window across the extracted text
-    for (int i = 0; i <= extractedText.length - batchLength; i++) {
-      final window = extractedText.substring(i, i + batchLength);
-      final similarity = _levenshteinSimilarity(batchNumber, window);
-      if (similarity > bestSimilarity) {
-        bestSimilarity = similarity;
-      }
+    // Direct contains check (case-insensitive)
+    if (extractedText.contains(batchNumber)) {
+      _logger.logOcr('BATCH_SEARCH: Exact match found for "$batchNumber"');
+      return 1.0; // 100% similarity for exact match
     }
     
-    // Also try with different window sizes (±2 characters)
-    for (int offset = -2; offset <= 2; offset++) {
-      final windowSize = batchLength + offset;
-      if (windowSize <= 0 || windowSize > extractedText.length) continue;
-      
-      for (int i = 0; i <= extractedText.length - windowSize; i++) {
-        final window = extractedText.substring(i, i + windowSize);
-        final similarity = _levenshteinSimilarity(batchNumber, window);
+    // Fuzzy matching - check similarity with each word/segment in text
+    double bestSimilarity = 0.0;
+    final words = extractedText.split(RegExp(r'\s+'));
+    
+    for (final word in words) {
+      if (word.length >= batchNumber.length - 2) { // Only check words of reasonable length
+        final similarity = _levenshteinSimilarity(batchNumber, word);
         if (similarity > bestSimilarity) {
           bestSimilarity = similarity;
         }
       }
     }
     
-    return bestSimilarity;
-  }
-  
-  /// Extract expiry date from text using multiple patterns
-  String? _extractExpiryFromText(String text) {
-    _logger.logOcr('EXPIRY_EXTRACT: Starting extraction from: "$text"');
-    
-    final expiryPatterns = [
-      RegExp(r'EXP[:\s]*(\d{2}[\/\-]\d{2}[\/\-]\d{4})', caseSensitive: false),
-      RegExp(r'EXPIRY[:\s]*(\d{2}[\/\-]\d{2}[\/\-]\d{4})', caseSensitive: false),
-      RegExp(r'(\d{4}-\d{2}-\d{2})'), // ISO format
-      RegExp(r'(\d{2}[\/\-]\d{2}[\/\-]\d{4})'), // DD/MM/YYYY or MM/DD/YYYY
-      RegExp(r'(\d{2}[\/\-]\d{4})'), // MM/YYYY
-      RegExp(r'(\d{4}[\/\-]\d{2}[\/\-]\d{2})'), // YYYY/MM/DD
-      RegExp(r'EXP[:\s]*(\d{2}[\/\-]\d{4})', caseSensitive: false), // EXP: MM/YYYY
-      // Enhanced patterns for month name abbreviations with more flexibility
-      RegExp(r'(\d{4}[-\/\s]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[-\/\s]*\d{1,2})', caseSensitive: false), // YYYY-MMM-DD
-      RegExp(r'(\d{1,2}[-\/\s]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[-\/\s]*\d{4})', caseSensitive: false), // DD-MMM-YYYY
-      RegExp(r'(\d{4}[-\/\s]*(january|february|march|april|may|june|july|august|september|october|november|december)[-\/\s]*\d{1,2})', caseSensitive: false), // Full month names
-      RegExp(r'(\d{1,2}[-\/\s]*(january|february|march|april|may|june|july|august|september|october|november|december)[-\/\s]*\d{4})', caseSensitive: false), // DD-Month-YYYY
-      // Catch all pattern for any sequence that looks like a date with month names
-      RegExp(r'(\d{4}.*?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec).*?\d{1,2})', caseSensitive: false),
-      RegExp(r'(\d{1,2}.*?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec).*?\d{4})', caseSensitive: false),
-    ];
-
-    for (final pattern in expiryPatterns) {
-      final match = pattern.firstMatch(text);
-      if (match != null && match.group(1) != null) {
-        String extractedDate = match.group(1)!.trim();
-        _logger.logOcr('EXPIRY_EXTRACT: Raw match found: "$extractedDate"');
-        
-        // Convert month names to numbers for consistency
-        String normalized = _normalizeMonthNames(extractedDate);
-        _logger.logOcr('EXPIRY_EXTRACT: Normalized to: "$normalized"');
-        
-        // Validate the normalized date
-        if (_isValidDateFormat(normalized)) {
-          return normalized;
-        }
+    // Also check against continuous segments of similar length
+    final batchLength = batchNumber.length;
+    for (int i = 0; i <= extractedText.length - batchLength; i++) {
+      final segment = extractedText.substring(i, i + batchLength);
+      final similarity = _levenshteinSimilarity(batchNumber, segment);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
       }
     }
     
-    _logger.logOcr('EXPIRY_EXTRACT: No valid expiry date found');
-    return null;
+    _logger.logOcr('BATCH_SEARCH: Best similarity for "$batchNumber": ${(bestSimilarity * 100).toInt()}%');
+    return bestSimilarity;
   }
   
-  /// Validate if the normalized date string is in a proper format
-  bool _isValidDateFormat(String dateStr) {
+  /// Search for batch expiry date in extracted text using multiple formats
+  /// Requires 100% exact match for any of the generated date formats
+  bool _searchBatchExpiryInText(String batchExpiryDate, String extractedText) {
+    _logger.logOcr('EXPIRY_SEARCH: Looking for expiry "$batchExpiryDate" in text');
+    
+    // Generate multiple date formats from the batch expiry date
+    final dateFormats = _generateDateFormats(batchExpiryDate);
+    
+    _logger.logOcr('EXPIRY_SEARCH: Generated ${dateFormats.length} formats to search: $dateFormats');
+    
+    final normalizedText = extractedText.toUpperCase();
+    
+    for (final format in dateFormats) {
+      final normalizedFormat = format.toUpperCase();
+      if (normalizedText.contains(normalizedFormat)) {
+        _logger.logOcr('EXPIRY_SEARCH: EXACT MATCH found for format "$format"');
+        return true;
+      }
+    }
+    
+    _logger.logOcr('EXPIRY_SEARCH: No exact matches found for any format');
+    return false;
+  }
+  
+  /// Generate multiple date formats from a given date string
+  List<String> _generateDateFormats(String dateStr) {
+    final formats = <String>[];
+    
     try {
-      // Try parsing as various formats
-      final formats = ['yyyy-MM-dd', 'dd-MM-yyyy', 'MM-dd-yyyy', 'MM-yyyy'];
+      // Try to parse the input date
+      DateTime? date;
+      final cleanDateStr = dateStr.trim();
       
-      for (final format in formats) {
+      // Common input formats to try parsing
+      final inputFormats = [
+        'yyyy-MM-dd', 'dd/MM/yyyy', 'MM/dd/yyyy', 'dd-MM-yyyy', 
+        'MM-dd-yyyy', 'yyyy/MM/dd', 'dd MMM yyyy', 'MMM dd yyyy',
+        'dd-MMM-yyyy', 'yyyy-MMM-dd'
+      ];
+      
+      for (final inputFormat in inputFormats) {
         try {
-          final date = DateFormat(format).parseStrict(dateStr);
-          // Check if it's a reasonable expiry date (not too far in past/future)
-          final now = DateTime.now();
-          final minDate = now.subtract(Duration(days: 365)); // 1 year ago
-          final maxDate = now.add(Duration(days: 365 * 10)); // 10 years future
-          
-          if (date.isAfter(minDate) && date.isBefore(maxDate)) {
-            _logger.logOcr('EXPIRY_VALIDATE: Valid date parsed with format $format: $date');
-            return true;
-          }
+          date = DateFormat(inputFormat).parse(cleanDateStr);
+          break;
         } catch (e) {
           continue;
         }
       }
       
-      _logger.logOcr('EXPIRY_VALIDATE: Date validation failed for: "$dateStr"');
-      return false;
-    } catch (e) {
-      _logger.logOcr('EXPIRY_VALIDATE: Error validating date "$dateStr": $e');
-      return false;
-    }
-  }
-  
-  /// Convert month names/abbreviations to numeric format for consistent parsing
-  String _normalizeMonthNames(String dateStr) {
-    final monthMap = {
-      'jan': '01', 'january': '01',
-      'feb': '02', 'february': '02',
-      'mar': '03', 'march': '03',
-      'apr': '04', 'april': '04',
-      'may': '05',
-      'jun': '06', 'june': '06',
-      'jul': '07', 'july': '07',
-      'aug': '08', 'august': '08',
-      'sep': '09', 'september': '09',
-      'oct': '10', 'october': '10',
-      'nov': '11', 'november': '11',
-      'dec': '12', 'december': '12',
-    };
-    
-    String normalized = dateStr.toLowerCase();
-    _logger.logOcr('MONTH_NORMALIZE: Input: "$normalized"');
-    
-    // Replace month names/abbreviations with numbers
-    for (final entry in monthMap.entries) {
-      if (normalized.contains(entry.key)) {
-        normalized = normalized.replaceAll(entry.key, entry.value);
-        _logger.logOcr('MONTH_NORMALIZE: Replaced ${entry.key} with ${entry.value}: "$normalized"');
-        break;
+      if (date == null) {
+        _logger.logOcr('DATE_FORMAT: Failed to parse date "$dateStr", using as-is');
+        return [dateStr]; // Return original if can't parse
       }
-    }
-    
-    // Normalize separators to dashes for consistent parsing
-    normalized = normalized.replaceAll(RegExp(r'[\/\s]+'), '-');
-    
-    // Clean up any extra characters or multiple dashes
-    normalized = normalized.replaceAll(RegExp(r'-+'), '-');
-    normalized = normalized.replaceAll(RegExp(r'[^0-9\-]'), '');
-    
-    // Ensure proper formatting (pad single digits)
-    final parts = normalized.split('-');
-    if (parts.length >= 3) {
-      for (int i = 0; i < parts.length; i++) {
-        if (parts[i].length == 1) {
-          parts[i] = '0${parts[i]}';
+      
+      // Generate various output formats
+      final outputFormats = [
+        'dd/MM/yyyy',   // 31/03/2026
+        'MM/yyyy',      // 03/2026
+        'dd-MM-yyyy',   // 31-03-2026
+        'MM-yyyy',      // 03-2026
+        'yyyy-MM-dd',   // 2026-03-31
+        'dd/MM/yy',     // 31/03/26
+        'MM/yy',        // 03/26
+        'dd-MM-yy',     // 31-03-26
+        'MM-yy',        // 03-26
+        'dd.MM.yyyy',   // 31.03.2026
+        'MM.yyyy',      // 03.2026
+        'ddMMyyyy',     // 31032026
+        'MMyyyy',       // 032026
+        'ddMMyy',       // 310326
+        'MMyy',         // 0326
+        'dd MMM yyyy',  // 31 MAR 2026
+        'MMM yyyy',     // MAR 2026
+        'dd-MMM-yyyy',  // 31-MAR-2026
+        'MMM-yyyy',     // MAR-2026
+        'yyyy-MMM-dd',  // 2026-MAR-31
+        'yyyy MMM dd',  // 2026 MAR 31
+      ];
+      
+      for (final outputFormat in outputFormats) {
+        try {
+          final formatted = DateFormat(outputFormat).format(date);
+          if (!formats.contains(formatted)) {
+            formats.add(formatted);
+          }
+        } catch (e) {
+          // Skip invalid formats
+          continue;
         }
       }
-      normalized = parts.join('-');
+      
+      _logger.logOcr('DATE_FORMAT: Generated ${formats.length} formats from "$dateStr"');
+      return formats;
+      
+    } catch (e) {
+      _logger.logOcr('DATE_FORMAT: Error generating formats for "$dateStr": $e');
+      return [dateStr]; // Return original if error
     }
-    
-    _logger.logOcr('MONTH_NORMALIZE: Final result: "$normalized"');
-    return normalized;
   }
   
   /// Find nearest batch matches for fallback when no exact matches found
+  /// Returns the top matches by similarity for user selection
   List<BatchMatchResult> findNearestBatchMatches({
     required String extractedText,
     required List<dynamic> batches,
@@ -717,25 +710,27 @@ class OcrService extends ChangeNotifier {
     final List<BatchMatchResult> allMatches = [];
     final normalizedText = extractedText.trim().toUpperCase();
     
-    _logger.logOcr('Finding nearest matches with lower threshold');
+    _logger.logOcr('NEAREST_SEARCH: Finding nearest matches (no exact expiry match required)');
     
     for (final batch in batches) {
       final batchNumber = (batch.batchNumber ?? batch.batchId ?? '').toString().trim().toUpperCase();
       if (batchNumber.isEmpty) continue;
 
-      double bestSim = _findBatchInText(batchNumber, normalizedText);
+      final similarity = _findBatchNumberInText(batchNumber, normalizedText);
       
-      // Add all matches regardless of threshold for nearest search
       allMatches.add(BatchMatchResult(
         batch: batch,
-        similarity: bestSim,
-        expiryValid: true, // Don't filter by expiry for nearest matches
+        similarity: similarity,
+        expiryValid: false, // Mark as not having exact expiry match
       ));
     }
     
     // Sort by similarity and take top results
     allMatches.sort((a, b) => b.similarity.compareTo(a.similarity));
-    return allMatches.take(maxResults).toList();
+    final result = allMatches.take(maxResults).toList();
+    
+    _logger.logOcr('NEAREST_SEARCH: Returning ${result.length} nearest matches');
+    return result;
   }
 
   /// Levenshtein similarity (1 - normalized distance)
@@ -771,64 +766,6 @@ class OcrService extends ChangeNotifier {
       }
     }
     return d[s.length][t.length];
-  }
-
-  /// Expiry date comparison (supports multiple formats)
-  bool _compareExpiryDates(String extracted, String batchExpiry) {
-    final formats = [
-      'dd/MM/yyyy', 'MM/yyyy', 'yyyy-MM-dd', 'dd-MM-yyyy', 'MM-yy', 'MM/yyyy', 
-      'yyyy/MM/dd', 'dd MMM yyyy', 'yyyy-MM-dd', 'dd-MM-yyyy', 'MM-dd-yyyy'
-    ];
-    
-    DateTime? parseDate(String s) {
-      // Clean the string first
-      String cleaned = s.trim().replaceAll(RegExp(r'\s+'), ' ');
-      
-      for (final f in formats) {
-        try {
-          return DateFormat(f).parse(cleaned);
-        } catch (_) {}
-      }
-      
-      // Try parsing with flexible separators
-      try {
-        // Handle YYYY-MM-DD format specifically
-        final parts = cleaned.split(RegExp(r'[-\/\s]+'));
-        if (parts.length >= 3) {
-          final year = int.tryParse(parts[0]);
-          final month = int.tryParse(parts[1]);
-          final day = int.tryParse(parts[2]);
-          
-          if (year != null && month != null && day != null && 
-              year >= 2000 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-            return DateTime(year, month, day);
-          }
-        }
-      } catch (_) {}
-      
-      return null;
-    }
-    
-    _logger.logOcr('Comparing expiry dates: extracted="$extracted", batch="$batchExpiry"');
-    
-    final d1 = parseDate(extracted);
-    final d2 = parseDate(batchExpiry);
-    
-    _logger.logOcr('Parsed dates: extracted=$d1, batch=$d2');
-    
-    if (d1 == null || d2 == null) {
-      _logger.logOcr('Failed to parse one or both dates for comparison');
-      return false;
-    }
-    
-    // Allow for month/year only matches, but also do exact date comparison
-    final sameMonthYear = d1.year == d2.year && d1.month == d2.month;
-    final exactMatch = d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
-    
-    _logger.logOcr('Date comparison: sameMonthYear=$sameMonthYear, exactMatch=$exactMatch');
-    
-    // Consider it a match if same month/year (for loose validation) but log exact match status
-    return sameMonthYear;
   }
 
   // Switch camera (front/back)

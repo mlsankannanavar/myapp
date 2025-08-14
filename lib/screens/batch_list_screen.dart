@@ -34,6 +34,11 @@ class _BatchListScreenState extends State<BatchListScreen>
     _searchController = TextEditingController();
     _scrollController = ScrollController();
     
+    // Add listener to rebuild when tab changes
+    _tabController.addListener(() {
+      setState(() {});
+    });
+    
     _initializeData();
   }
 
@@ -141,8 +146,9 @@ class _BatchListScreenState extends State<BatchListScreen>
         if (_searchQuery.isNotEmpty || _searchController.text.isNotEmpty)
           _buildSearchBar(),
         
-        // Filter chips
-        _buildFilterChips(),
+        // Filter chips - only show for Available Batches tab
+        if (_tabController.index == 0)
+          _buildFilterChips(),
         
         // Content
         Expanded(
@@ -271,88 +277,6 @@ class _BatchListScreenState extends State<BatchListScreen>
           compact: true,
         );
       },
-    );
-  }
-
-  Widget _buildEmptyState(String tab) {
-    String title, subtitle;
-    String? actionText;
-    IconData icon;
-    VoidCallback? onAction;
-
-    switch (tab) {
-      case 'recent':
-        title = 'No recent batches';
-        subtitle = 'Batches you\'ve scanned recently will appear here';
-        icon = Icons.schedule;
-        // Remove QR scan action for recent tab
-        break;
-      case 'favorites':
-        title = 'No favorite batches';
-        subtitle = 'Mark batches as favorites to find them quickly';
-        icon = Icons.favorite_border;
-        actionText = 'View All Batches';
-        onAction = () => _tabController.animateTo(0);
-        break;
-      default:
-        if (_searchQuery.isNotEmpty) {
-          title = 'No results found';
-          subtitle = 'Try adjusting your search or filters';
-          icon = Icons.search_off;
-          actionText = 'Clear Search';
-          onAction = _clearSearch;
-        } else {
-          title = 'No batches available';
-          subtitle = 'Available batches will appear here once a session is loaded';
-          icon = Icons.inventory_2_outlined;
-          // Remove QR scan action for default empty state
-        }
-    }
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 80,
-              color: Colors.grey.shade400,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            if (actionText != null && onAction != null)
-              ElevatedButton.icon(
-                onPressed: onAction,
-                icon: Icon(icon),
-                label: Text(actionText),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 

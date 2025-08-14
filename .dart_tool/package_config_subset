@@ -6,6 +6,10 @@ analyzer
 3.3
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer-6.11.0/
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/analyzer-6.11.0/lib/
+archive
+3.0
+file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/archive-4.0.7/
+file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/archive-4.0.7/lib/
 args
 3.3
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/args-2.7.0/
@@ -78,6 +82,10 @@ checked_yaml
 3.8
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/checked_yaml-2.0.4/
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/checked_yaml-2.0.4/lib/
+cli_util
+3.4
+file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/cli_util-0.4.2/
+file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/cli_util-0.4.2/lib/
 clock
 3.4
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/clock-1.1.2/
@@ -158,6 +166,10 @@ fixnum
 3.1
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/fixnum-1.1.1/
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/fixnum-1.1.1/lib/
+flutter_launcher_icons
+2.18
+file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_launcher_icons-0.13.1/
+file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_launcher_icons-0.13.1/lib/
 flutter_lints
 3.1
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_lints-3.0.2/
@@ -218,6 +230,10 @@ http_parser
 3.4
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/http_parser-4.1.2/
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/http_parser-4.1.2/lib/
+image
+3.0
+file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/image-4.5.4/
+file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/image-4.5.4/lib/
 intl
 3.0
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/intl-0.19.0/
@@ -362,6 +378,10 @@ pool
 2.12
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/pool-1.5.1/
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/pool-1.5.1/lib/
+posix
+3.0
+file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/posix-6.0.3/
+file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/posix-6.0.3/lib/
 provider
 2.12
 file:///C:/Users/358344/AppData/Local/Pub/Cache/hosted/pub.dev/provider-6.1.5/
