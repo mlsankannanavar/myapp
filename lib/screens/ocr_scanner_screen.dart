@@ -19,7 +19,6 @@ class OCRScannerScreen extends StatefulWidget {
 
 class _OCRScannerScreenState extends State<OCRScannerScreen>
     with WidgetsBindingObserver {
-  CameraController? _cameraController;
   late OcrService _ocrService;
   
   bool _isCameraInitialized = false;
@@ -27,69 +26,28 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
   bool _isFlashOn = false;
   String? _capturedImagePath;
   String? _extractedText;
-  List<String> _extractedLines = [];
   
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeCamera();
     _initializeOCR();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _cameraController?.dispose();
+    // Don't dispose camera controller here as it's managed by OCR service
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
-    }
-
+    // Handle app lifecycle for OCR service
     if (state == AppLifecycleState.inactive) {
-      _cameraController?.dispose();
+      // OCR service will handle camera cleanup
     } else if (state == AppLifecycleState.resumed) {
-      _initializeCamera();
-    }
-  }
-
-  Future<void> _initializeCamera() async {
-    final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
-    
-    try {
-      loggingProvider.logApp('Initializing camera for OCR');
-      
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        throw Exception('No cameras available');
-      }
-
-      _cameraController = CameraController(
-        cameras.first,
-        ResolutionPreset.high,
-        enableAudio: false,
-      );
-
-      await _cameraController!.initialize();
-      
-      if (mounted) {
-        setState(() {
-          _isCameraInitialized = true;
-        });
-      }
-      
-      loggingProvider.logSuccess('Camera initialized for OCR');
-    } catch (e) {
-      loggingProvider.logError('Camera initialization failed: $e');
-      if (mounted) {
-        setState(() {
-          _isCameraInitialized = false;
-        });
-      }
+      _reinitializeOCR();
     }
   }
 
@@ -98,140 +56,54 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     
     try {
       _ocrService = OcrService.instance;
-      await _ocrService.initialize();
-      loggingProvider.logApp('OCR service initialized successfully');
+      loggingProvider.logApp('Initializing OCR service');
+      
+      final initialized = await _ocrService.initialize();
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = initialized;
+        });
+      }
+      
+      if (initialized) {
+        loggingProvider.logSuccess('OCR service initialized successfully');
+      } else {
+        loggingProvider.logError('OCR service initialization failed');
+      }
     } catch (e) {
       loggingProvider.logError('OCR service initialization failed: $e');
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = false;
+        });
+      }
     }
   }
 
-  // --- Enhanced: Fuzzy match, quantity pad, and submit workflow ---
-  Future<void> _showBatchMatchAndSubmitFlow() async {
-    final batchProvider = Provider.of<BatchProvider>(context, listen: false);
+  void _reinitializeOCR() async {
     final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
     
-    if (!batchProvider.hasSession) {
-      _showInfoDialog('No active session. Please scan a QR code first.');
-      return;
-    }
-    
-    // Show processing dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 16),
-            Expanded(
-              child: Text('Processing and matching batch information...'),
-            ),
-          ],
-        ),
-      ),
-    );
-    
     try {
-      // Extract batch information from OCR text
-      String? extractedBatch;
-      String? extractedExpiry;
-      
-      final text = _extractedText?.toUpperCase() ?? '';
-      loggingProvider.logOCR('Starting batch extraction from text: ${text.length} characters');
-      
-      // Enhanced batch number extraction patterns
-      final batchPatterns = [
-        RegExp(r'BATCH[:\s]*([A-Z0-9\-_]+)', caseSensitive: false),
-        RegExp(r'LOT[:\s]*([A-Z0-9\-_]+)', caseSensitive: false),
-        RegExp(r'B[:\s]*([A-Z0-9\-_]{3,})', caseSensitive: false),
-        RegExp(r'([A-Z0-9\-_]{4,})'), // Generic pattern for batch-like strings
-      ];
-      
-      for (final pattern in batchPatterns) {
-        final match = pattern.firstMatch(text);
-        if (match != null && match.group(1) != null) {
-          extractedBatch = match.group(1)!.trim();
-          break;
-        }
+      loggingProvider.logApp('Re-initializing OCR service after app resume');
+      final initialized = await _ocrService.reinitialize();
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = initialized;
+        });
       }
       
-      // Enhanced expiry date extraction
-      final expiryPatterns = [
-        RegExp(r'EXP[:\s]*(\d{2}[\/\-]\d{2}[\/\-]\d{4})', caseSensitive: false),
-        RegExp(r'EXPIRY[:\s]*(\d{2}[\/\-]\d{2}[\/\-]\d{4})', caseSensitive: false),
-        RegExp(r'(\d{2}[\/\-]\d{2}[\/\-]\d{4})'),
-        RegExp(r'(\d{4}[\/\-]\d{2}[\/\-]\d{2})'),
-        RegExp(r'(\d{2}[\/\-]\d{4})'), // MM/YYYY format
-      ];
-      
-      for (final pattern in expiryPatterns) {
-        final match = pattern.firstMatch(text);
-        if (match != null) {
-          extractedExpiry = match.group(1);
-          break;
-        }
+      if (initialized) {
+        loggingProvider.logSuccess('OCR service re-initialized successfully');
+      } else {
+        loggingProvider.logError('OCR service re-initialization failed');
       }
-      
-      // Close processing dialog
-      Navigator.of(context).pop();
-      
-      if (extractedBatch == null) {
-        _showInfoDialog('No batch number found in extracted text. Please try a clearer image or manual entry.');
-        return;
+    } catch (e) {
+      loggingProvider.logError('OCR service re-initialization failed: $e');
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = false;
+        });
       }
-      
-      loggingProvider.logOCR('Extracted batch info', 
-        extractedText: 'Batch: $extractedBatch, Expiry: $extractedExpiry');
-      
-      // Find matching batches using fuzzy logic
-      final matches = _ocrService.findBestBatchMatches(
-        extractedBatch: extractedBatch,
-        extractedExpiry: extractedExpiry,
-        batches: batchProvider.batches,
-        similarityThreshold: 0.75,
-      );
-      
-      batchProvider.incrementScanCount();
-      
-      if (matches.isEmpty) {
-        // Show manual selection dialog with top 2 closest matches
-        await _showManualBatchSelection(extractedBatch, extractedExpiry);
-        return;
-      }
-      
-      final bestMatch = matches.first;
-      final batch = bestMatch.batch;
-      final confidence = (bestMatch.similarity * 100).toInt();
-      
-      loggingProvider.logSuccess('Batch match found: ${batch.batchNumber ?? batch.batchId}, Confidence: $confidence%');
-      
-      // Show confirmation and get quantity
-      final confirmed = await _showBatchConfirmationDialog(batch, confidence, bestMatch.similarity == 1.0);
-      if (!confirmed) return;
-      
-      final quantity = await _showQuantityPad();
-      if (quantity == null) return;
-      
-      // Submit to API
-      await _submitBatch(
-        batch: batch,
-        quantity: quantity,
-        confidence: confidence,
-        matchType: bestMatch.similarity == 1.0 ? 'exact' : 'fuzzy',
-        extractedText: _extractedText ?? '',
-        alternativeMatches: matches.length > 1 
-          ? matches.skip(1).map((m) => (m.batch.batchNumber ?? m.batch.batchId ?? '').toString()).toList() 
-          : [],
-      );
-      
-    } catch (e, stackTrace) {
-      // Close processing dialog if still open
-      if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
-      
-      loggingProvider.logError('Batch matching failed', error: e, stackTrace: stackTrace);
-      batchProvider.incrementErrorCount();
-      if (mounted) _showInfoDialog('Failed to process batch: ${e.toString()}');
     }
   }
 
@@ -353,17 +225,7 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     ) ?? false;
   }
 
-  Future<void> _showManualBatchSelection(String extractedBatch, String? extractedExpiry) async {
-    final batchProvider = Provider.of<BatchProvider>(context, listen: false);
-    
-    // Get top 2 closest matches with lower threshold
-    final nearMatches = _ocrService.findBestBatchMatches(
-      extractedBatch: extractedBatch,
-      extractedExpiry: extractedExpiry,
-      batches: batchProvider.batches,
-      similarityThreshold: 0.5, // Lower threshold for suggestions
-    ).take(2).toList();
-    
+  Future<void> _showManualBatchSelection(List<dynamic> nearestMatches, String extractedText) async {
     dynamic selectedBatch;
     
     await showDialog(
@@ -373,12 +235,12 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Extracted: "$extractedBatch"'),
+            Text('Extracted text: "${extractedText.length > 50 ? extractedText.substring(0, 50) + '...' : extractedText}"'),
             const SizedBox(height: 16),
-            if (nearMatches.isNotEmpty) ...[
+            if (nearestMatches.isNotEmpty) ...[
               const Text('Did you mean one of these?'),
               const SizedBox(height: 12),
-              ...nearMatches.map((match) => ListTile(
+              ...nearestMatches.map((match) => ListTile(
                 title: Text(match.batch.batchNumber ?? match.batch.batchId ?? ''),
                 subtitle: Text('${(match.similarity * 100).toInt()}% match'),
                 onTap: () {
@@ -407,7 +269,7 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
           quantity: quantity,
           confidence: 50, // Manual selection confidence
           matchType: 'manual',
-          extractedText: _extractedText ?? '',
+          extractedText: extractedText,
           alternativeMatches: [],
         );
       }
@@ -429,7 +291,7 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     try {
       final sessionId = batchProvider.currentSessionId!;
       
-      loggingProvider.logApp('Submitting batch', 
+      loggingProvider.logApp('Submitting batch',
         data: {
           'sessionId': sessionId,
           'batchNumber': batch.batchNumber ?? batch.batchId,
@@ -659,11 +521,30 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
   }
 
   Widget _buildCameraPreview() {
+    if (!_isCameraInitialized || _ocrService.cameraController?.value.isInitialized != true) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 16),
+              Text(
+                'Initializing camera...',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Stack(
       children: [
         // Camera preview
         SizedBox.expand(
-          child: CameraPreview(_cameraController!),
+          child: CameraPreview(_ocrService.cameraController!),
         ),
         
         // Overlay with capture guidelines
@@ -867,19 +748,6 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _showBatchMatchAndSubmitFlow,
-                  icon: const Icon(Icons.search),
-                  label: const Text('Find & Submit Batch'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _resetCapture,
                   icon: const Icon(Icons.refresh),
@@ -986,15 +854,19 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
     
     try {
-      await _cameraController!.setFlashMode(
-        _isFlashOn ? FlashMode.off : FlashMode.torch,
-      );
-      
-      setState(() {
-        _isFlashOn = !_isFlashOn;
-      });
-      
-      loggingProvider.logApp('OCR flash ${_isFlashOn ? 'enabled' : 'disabled'}');
+      if (_ocrService.cameraController?.value.isInitialized == true) {
+        await _ocrService.cameraController!.setFlashMode(
+          _isFlashOn ? FlashMode.off : FlashMode.torch,
+        );
+        
+        setState(() {
+          _isFlashOn = !_isFlashOn;
+        });
+        
+        loggingProvider.logApp('OCR flash ${_isFlashOn ? 'enabled' : 'disabled'}');
+      } else {
+        loggingProvider.logError('Camera not initialized for flash toggle');
+      }
     } catch (e) {
       loggingProvider.logError('Failed to toggle flash: $e');
     }
@@ -1002,9 +874,15 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
 
   Future<void> _captureImage() async {
     final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
+    final batchProvider = Provider.of<BatchProvider>(context, listen: false);
     
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+    if (!_isCameraInitialized || _ocrService.cameraController?.value.isInitialized != true) {
       loggingProvider.logError('Camera not initialized for capture');
+      return;
+    }
+
+    if (!batchProvider.hasSession) {
+      _showInfoDialog('No active session. Please scan a QR code first.');
       return;
     }
 
@@ -1013,20 +891,82 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
         _isProcessing = true;
       });
 
-      loggingProvider.logOCR('Capturing image for OCR processing');
+      loggingProvider.logOCR('Starting capture and auto-matching workflow');
 
-      final XFile image = await _cameraController!.takePicture();
-      
+      // Check if OCR service is initialized
+      if (!_ocrService.isInitialized) {
+        loggingProvider.logOCR('OCR service not initialized, attempting to initialize...');
+        final initialized = await _ocrService.initialize();
+        if (!initialized) {
+          throw Exception('Failed to initialize OCR service');
+        }
+      }
+
+      // Use the new auto-matching method
+      final result = await _ocrService.captureAndExtractTextWithMatching(
+        availableBatches: batchProvider.batches,
+        similarityThreshold: 0.75,
+      );
+
+      if (result == null || !result['success']) {
+        throw Exception(result?['error'] ?? 'Failed to process image');
+      }
+
+      final extractedText = result['extractedText'] as String;
+      final matches = result['matches'] as List<dynamic>;
+      final nearestMatches = result['nearestMatches'] as List<dynamic>;
+
       setState(() {
-        _capturedImagePath = image.path;
+        _extractedText = extractedText;
+        _capturedImagePath = 'captured'; // Just to indicate capture was successful
       });
 
-      loggingProvider.logSuccess('Image captured successfully');
+      loggingProvider.logSuccess('OCR processing completed with auto-matching', data: {
+        'textLength': extractedText.length,
+        'matchesFound': matches.length,
+        'nearestMatches': nearestMatches.length,
+      });
 
-      // Process the captured image
-      await _processImage(image.path);
+      batchProvider.incrementScanCount();
+
+      // Handle matching results automatically
+      if (matches.isNotEmpty) {
+        // Found exact matches
+        final bestMatch = matches.first;
+        final batch = bestMatch.batch;
+        final confidence = (bestMatch.similarity * 100).toInt();
+        
+        loggingProvider.logSuccess('Batch match found: ${batch.batchNumber ?? batch.batchId}, Confidence: $confidence%');
+        
+        // Show confirmation and get quantity
+        final confirmed = await _showBatchConfirmationDialog(batch, confidence, bestMatch.similarity >= 0.99);
+        if (!confirmed) return;
+
+        final quantity = await _showQuantityPad();
+        if (quantity == null) return;
+
+        // Submit to API
+        await _submitBatch(
+          batch: batch,
+          quantity: quantity,
+          confidence: confidence,
+          matchType: bestMatch.similarity >= 0.99 ? 'exact' : 'fuzzy',
+          extractedText: extractedText,
+          alternativeMatches: matches.length > 1 
+            ? matches.skip(1).map((m) => (m.batch.batchNumber ?? m.batch.batchId ?? '').toString()).toList() 
+            : [],
+        );
+      } else if (nearestMatches.isNotEmpty) {
+        // No exact matches, show nearest options
+        await _showManualBatchSelection(nearestMatches, extractedText);
+      } else {
+        // No matches at all
+        _showInfoDialog('No matching batches found. Please verify the text extraction or try manual entry.');
+      }
+
     } catch (e) {
-      loggingProvider.logError('Image capture failed: $e');
+      loggingProvider.logError('Image capture and processing failed: $e');
+      _showInfoDialog('Failed to process image: ${e.toString()}');
     } finally {
       setState(() {
         _isProcessing = false;
@@ -1043,73 +983,6 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     loggingProvider.logApp('Gallery picker functionality to be implemented');
   }
 
-  Future<void> _processImage(String imagePath) async {
-    final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
-    
-    try {
-      setState(() {
-        _isProcessing = true;
-      });
-
-      // Check if OCR service is initialized
-      if (!_ocrService.isInitialized) {
-        loggingProvider.logError('OCR service not initialized, attempting to initialize...');
-        await _ocrService.initialize();
-      }
-
-      loggingProvider.logOCR('Starting OCR processing');
-
-      final result = await _ocrService.processImage(imagePath);
-
-      if (result != null && result.isNotEmpty) {
-        final extractedText = result;
-        
-        setState(() {
-          _extractedText = extractedText;
-          _extractedLines = _parseExtractedText(extractedText);
-        });
-
-        loggingProvider.logSuccess('OCR processing completed', data: {
-          'textLength': extractedText.length,
-          'linesFound': _extractedLines.length,
-        });
-      } else {
-        loggingProvider.logError('OCR processing failed: No text extracted');
-        setState(() {
-          _extractedText = '';
-          _extractedLines = [];
-        });
-      }
-    } catch (e) {
-      loggingProvider.logError('OCR processing error: $e', stackTrace: StackTrace.current);
-    } finally {
-      setState(() {
-        _isProcessing = false;
-      });
-    }
-  }
-
-  List<String> _parseExtractedText(String text) {
-    final lines = text.split('\n').where((line) => line.trim().isNotEmpty).toList();
-    final batchLines = <String>[];
-
-    // Look for potential batch-related information
-    for (final line in lines) {
-      final lowerLine = line.toLowerCase();
-      if (lowerLine.contains('batch') ||
-          lowerLine.contains('lot') ||
-          lowerLine.contains('exp') ||
-          lowerLine.contains('mfg') ||
-          lowerLine.contains('date') ||
-          RegExp(r'\d{2}/\d{2}/\d{4}').hasMatch(line) ||
-          RegExp(r'\d{4}-\d{2}-\d{2}').hasMatch(line)) {
-        batchLines.add(line.trim());
-      }
-    }
-
-    return batchLines;
-  }
-
   void _resetCapture() {
     final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
     loggingProvider.logOCR('Resetting capture');
@@ -1117,7 +990,6 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     setState(() {
       _capturedImagePath = null;
       _extractedText = null;
-      _extractedLines = [];
     });
   }
 

@@ -371,7 +371,7 @@ class _LogViewerScreenState extends State<LogViewerScreen>
     return Consumer<LoggingProvider>(
       builder: (context, loggingProvider, child) {
         final levelCounts = loggingProvider.getLogCountByLevel();
-        final categoryCounts = loggingProvider.getLogCountByCategory();
+        final categoryCounts = loggingProvider.getAllLogCountsByCategory();
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16),

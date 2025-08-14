@@ -3,7 +3,6 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../utils/helpers.dart';
 import '../utils/log_level.dart';
-import '../utils/constants.dart';
 import 'logging_service.dart';
 
 class QrScannerService extends ChangeNotifier {
@@ -94,33 +93,24 @@ class QrScannerService extends ChangeNotifier {
 
   // Process scanned QR code
   void processScannedCode(BarcodeCapture capture) {
-    final startTime = DateTime.now();
-    
     try {
-      _logger.logQrScan('QR_SCAN_START: Processing QR code capture');
-      
       final codes = capture.barcodes;
       if (codes.isEmpty) {
-        _logger.logQrScan('QR_SCAN_EMPTY: No QR codes detected in capture', success: false);
+        _logger.logQrScan('No QR codes detected in capture', success: false);
         return;
       }
 
-      _logger.logQrScan('QR_SCAN_DETECTED: Found ${codes.length} QR code(s) in capture');
-      
       final code = codes.first;
       final rawValue = code.rawValue;
 
       if (rawValue == null || rawValue.isEmpty) {
-        _logger.logQrScan('QR_SCAN_NULL: QR code data is null or empty', success: false);
+        _logger.logQrScan('Empty QR code detected', success: false);
         return;
       }
 
-      _logger.logQrScan('QR_SCAN_DATA: Raw QR data extracted: "$rawValue"');
-      _logger.logQrScan('QR_SCAN_LENGTH: QR data length: ${rawValue.length} characters');
-
       // Prevent duplicate scans within a short time frame
       if (_isDuplicateScan(rawValue)) {
-        _logger.logQrScan('QR_SCAN_DUPLICATE: Duplicate scan ignored (within ${Constants.qrScanCooldownMs}ms)', 
+        _logger.logQrScan('Duplicate QR code scan ignored', 
             qrData: rawValue, success: false);
         return;
       }
@@ -128,33 +118,23 @@ class QrScannerService extends ChangeNotifier {
       _lastScannedCode = rawValue;
       _lastScanTime = DateTime.now();
 
-      final processTime = DateTime.now().difference(startTime).inMilliseconds;
-      _logger.logQrScan('QR_SCAN_CAPTURED: QR code captured successfully in ${processTime}ms', 
+      _logger.logQrScan('QR code scanned successfully', 
           qrData: rawValue, success: true);
 
-      // Extract and validate session ID
-      _logger.logQrScan('QR_VALIDATE_START: Beginning session ID validation');
-      final sessionId = _extractSessionId(rawValue);
-      
-      if (sessionId != null) {
-        _logger.logQrScan('QR_VALIDATE_SUCCESS: Valid session ID extracted: "$sessionId"', 
+      // Validate the scanned code
+      if (_isValidSessionId(rawValue)) {
+        _logger.logQrScan('Valid session ID detected', 
             qrData: rawValue, success: true);
         
-        _scannedData = sessionId;
+        // Return the scanned session ID so it can be used by calling code
+        _scannedData = rawValue;
         notifyListeners();
-        
-        final totalTime = DateTime.now().difference(startTime).inMilliseconds;
-        _logger.logQrScan('QR_SCAN_COMPLETE: QR processing completed in ${totalTime}ms');
-        
       } else {
-        _logger.logQrScan('QR_VALIDATE_FAILED: Invalid session ID format', 
+        _logger.logQrScan('Invalid session ID format', 
             qrData: rawValue, success: false);
-        _logger.logQrScan('QR_VALIDATE_PATTERNS: Expected: medha-XXXXX, session_XXXXX, or alphanumeric');
       }
-      
     } catch (e, stackTrace) {
-      final errorTime = DateTime.now().difference(startTime).inMilliseconds;
-      _logger.logError('QR_SCAN_ERROR: Exception after ${errorTime}ms - $e',
+      _logger.logError('Error processing scanned QR code',
           error: e, stackTrace: stackTrace, category: 'QR-SCAN');
     }
   }
@@ -226,70 +206,6 @@ class QrScannerService extends ChangeNotifier {
 
     final timeDifference = DateTime.now().difference(_lastScanTime!);
     return _lastScannedCode == code && timeDifference.inSeconds < 2;
-  }
-
-  // Extract session ID from QR code with detailed logging
-  String? _extractSessionId(String qrData) {
-    try {
-      _logger.logQrScan('QR_EXTRACT_START: Beginning session ID extraction');
-      _logger.logQrScan('QR_EXTRACT_INPUT: Input data: "$qrData"');
-      _logger.logQrScan('QR_EXTRACT_LENGTH: Input length: ${qrData.length} characters');
-
-      final trimmedData = qrData.trim();
-      _logger.logQrScan('QR_EXTRACT_TRIMMED: Trimmed data: "$trimmedData"');
-
-      // Pattern 1: medha-XXXXXX format (priority pattern)
-      final medhaPattern = RegExp(r'medha-([A-Za-z0-9]+)', caseSensitive: false);
-      final medhaMatch = medhaPattern.firstMatch(trimmedData);
-      if (medhaMatch != null) {
-        final sessionId = medhaMatch.group(0)!;
-        _logger.logQrScan('QR_EXTRACT_MEDHA: Session ID extracted using medha pattern: "$sessionId"');
-        _logger.logQrScan('QR_EXTRACT_SUCCESS: Extraction successful with pattern 1');
-        return sessionId;
-      }
-
-      // Pattern 2: session_XXXXXX format
-      final sessionPattern = RegExp(r'session_([A-Za-z0-9]+)', caseSensitive: false);
-      final sessionMatch = sessionPattern.firstMatch(trimmedData);
-      if (sessionMatch != null) {
-        final sessionId = sessionMatch.group(0)!;
-        _logger.logQrScan('QR_EXTRACT_SESSION: Session ID extracted using session pattern: "$sessionId"');
-        _logger.logQrScan('QR_EXTRACT_SUCCESS: Extraction successful with pattern 2');
-        return sessionId;
-      }
-
-      // Pattern 3: Direct alphanumeric (8+ characters)
-      final directPattern = RegExp(r'^[A-Za-z0-9\-_]{8,}$');
-      if (directPattern.hasMatch(trimmedData) && trimmedData.length >= 8) {
-        _logger.logQrScan('QR_EXTRACT_DIRECT: Using direct QR code as session ID: "$trimmedData"');
-        _logger.logQrScan('QR_EXTRACT_SUCCESS: Extraction successful with pattern 3');
-        return trimmedData;
-      }
-
-      // Pattern 4: URL-like format (extract from query params or path)
-      final urlPattern = RegExp(r'[?&]session[=:]([A-Za-z0-9\-_]+)', caseSensitive: false);
-      final urlMatch = urlPattern.firstMatch(trimmedData);
-      if (urlMatch != null) {
-        final sessionId = urlMatch.group(1)!;
-        _logger.logQrScan('QR_EXTRACT_URL: Session ID extracted from URL: "$sessionId"');
-        _logger.logQrScan('QR_EXTRACT_SUCCESS: Extraction successful with pattern 4');
-        return sessionId;
-      }
-
-      _logger.logQrScan('QR_EXTRACT_FAILED: No valid session ID pattern matched');
-      _logger.logQrScan('QR_EXTRACT_PATTERNS: Supported patterns:');
-      _logger.logQrScan('QR_EXTRACT_PATTERN1: medha-XXXXX (e.g., medha-OR10ae)');
-      _logger.logQrScan('QR_EXTRACT_PATTERN2: session_XXXXX (e.g., session_12345)');
-      _logger.logQrScan('QR_EXTRACT_PATTERN3: Direct alphanumeric 8+ chars');
-      _logger.logQrScan('QR_EXTRACT_PATTERN4: URL with session parameter');
-      
-      return null;
-
-    } catch (e) {
-      _logger.logError('QR_EXTRACT_ERROR: Exception during session ID extraction - $e', 
-          category: 'QR-SCAN');
-      return null;
-    }
   }
 
   // Validate session ID format

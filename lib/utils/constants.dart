@@ -35,7 +35,6 @@ class Constants {
   static const Duration qrScannerTimeout = Duration(seconds: 30);
   static const String qrScannerTitle = 'Scan QR Code for Session';
   static const String qrScannerSubtitle = 'Position the QR code within the frame';
-  static const int qrScanCooldownMs = 2000; // 2 seconds cooldown between scans
   
   // OCR Configuration
   static const String ocrTitle = 'Scan Batch Information';

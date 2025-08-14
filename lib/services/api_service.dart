@@ -144,51 +144,34 @@ class ApiService {
     final url = '$baseUrl$endpoint';
     final stopwatch = Stopwatch()..start();
 
-    // Enhanced request logging
+    // Log the outgoing request
     _logger.logApiRequest('GET', url, headers: defaultHeaders);
-    _logger.logApp('API_BATCH_SESSION: Session ID: "$sessionId"');
-    _logger.logApp('API_BATCH_ENDPOINT: Full URL: $url');
-    _logger.logApp('API_BATCH_HEADERS: Request headers sent');
 
     try {
       // Validate session ID
       if (!Helpers.isValidSessionId(sessionId)) {
-        _logger.logError('API_BATCH_INVALID_SESSION: Invalid session ID format: "$sessionId"');
         throw ArgumentError('Invalid session ID: $sessionId');
       }
-      
-      _logger.logApp('API_BATCH_VALIDATION: Session ID validation passed');
 
       // Check network connectivity
       final connectivityResults = await Connectivity().checkConnectivity();
       if (connectivityResults.contains(ConnectivityResult.none) || connectivityResults.isEmpty) {
-        _logger.logNetwork('API_BATCH_NO_NETWORK: No network connectivity available', level: LogLevel.error);
+        _logger.logNetwork('No network connectivity', level: LogLevel.error);
         throw const SocketException('No network connection');
       }
-      
-      _logger.logNetwork('API_BATCH_NETWORK_OK: Network connectivity confirmed');
 
-      _logger.logApp('API_BATCH_SENDING: Sending HTTP GET request to server');
       final response = await _client
           .get(Uri.parse(url), headers: defaultHeaders)
           .timeout(timeout);
 
       stopwatch.stop();
 
-      // Enhanced response logging
-      _logger.logApiResponse('GET', url, response.statusCode, stopwatch.elapsed, 
+      // Log the response
+      _logger.logApiResponse('GET', url, response.statusCode, stopwatch.elapsed,
           headers: response.headers, body: response.body);
-      _logger.logApp('API_BATCH_STATUS: HTTP Status Code: ${response.statusCode}');
-      _logger.logApp('API_BATCH_SIZE: Response body size: ${response.body.length} characters');
 
       if (response.statusCode == 200) {
-        _logger.logApp('API_BATCH_SUCCESS: HTTP 200 - Parsing response body');
-        
         final jsonData = json.decode(response.body) as Map<String, dynamic>;
-        _logger.logApp('API_BATCH_PARSED: JSON response parsed successfully');
-        
-        // Log response structure
-        _logger.logApp('API_BATCH_STRUCTURE: Response keys: ${jsonData.keys.toList()}');
         
         // Create API response first
         final apiResponse = ApiResponse.success(
@@ -199,30 +182,14 @@ class ApiService {
         );
 
         // Convert to BatchListResponse
-        _logger.logApp('API_BATCH_CONVERTING: Converting API response to BatchListResponse');
         final batchResponse = BatchListResponse.fromApiResponse(apiResponse);
         
-        // Detailed batch logging
-        _logger.logApp('API_BATCH_COUNT: Total batches received: ${batchResponse.batchCount}');
-        _logger.logApp('API_BATCH_LOAD_SUCCESS: Batch data loaded successfully for session "$sessionId"', level: LogLevel.success);
-        
-        // Log individual batch details for matching reference
-        if (batchResponse.isSuccess && batchResponse.data != null) {
-          _logger.logApp('API_BATCH_DETAILS: Detailed batch information:');
-          for (int i = 0; i < batchResponse.data!.length; i++) {
-            final batch = batchResponse.data![i];
-            _logger.logApp('API_BATCH_${i + 1}: ${batch.batchNumber} | Product: ${batch.productName ?? batch.itemName} | Expires: ${batch.expiryDate}');
-            _logger.logApp('API_BATCH_${i + 1}_DETAILS: Manufactured: ${batch.manufacturingDate} | Status: ${batch.status}');
-          }
-        }
-        
-        _logger.logApp('Batch data processing completed',
+        _logger.logApp('Batch data loaded successfully',
             level: LogLevel.success,
             data: {
               'sessionId': sessionId,
               'batchCount': batchResponse.batchCount,
-              'duration': stopwatch.elapsed.inMilliseconds,
-              'responseSize': response.body.length,
+              'duration': stopwatch.elapsed.inMilliseconds
             });
 
         return batchResponse;

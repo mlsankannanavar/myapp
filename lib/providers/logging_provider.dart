@@ -154,7 +154,7 @@ class LoggingProvider extends ChangeNotifier {
     return logs.where((log) => log.level == LogLevel.success).length;
   }
 
-  int getLogCountForCategory(String category) {
+  int getLogCountByCategory(String category) {
     return logs.where((log) => log.category.toLowerCase() == category.toLowerCase()).length;
   }
 
@@ -214,7 +214,7 @@ class LoggingProvider extends ChangeNotifier {
     return _loggingService.getLogCountByLevel();
   }
 
-  Map<String, int> getLogCountByCategory() {
+  Map<String, int> getAllLogCountsByCategory() {
     return _loggingService.getLogCountByCategory();
   }
 

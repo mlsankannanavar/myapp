@@ -33,6 +33,7 @@ class OcrService extends ChangeNotifier {
   List<CameraDescription>? get cameras => _cameras;
   bool get isInitialized => _isInitialized;
   bool get isProcessing => _isProcessing;
+  bool get isFlashlightOn => _isFlashlightOn;
   String? get lastExtractedText => _lastExtractedText;
   double? get lastConfidence => _lastConfidence;
   DateTime? get lastProcessTime => _lastProcessTime;
@@ -44,28 +45,59 @@ class OcrService extends ChangeNotifier {
     try {
       _logger.logOcr('Initializing OCR service');
 
-      // Check camera permission
+      // Check camera permission first
       final permissionStatus = await _checkCameraPermission();
       if (!permissionStatus) {
         _logger.logOcr('Camera permission denied', success: false);
         return false;
       }
 
-      // Get available cameras
-      _cameras = await availableCameras();
+      // Get available cameras with retry mechanism
+      int retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          _cameras = await availableCameras();
+          if (_cameras != null && _cameras!.isNotEmpty) break;
+          
+          retryCount++;
+          if (retryCount < maxRetries) {
+            _logger.logOcr('Retry attempt $retryCount for camera discovery');
+            await Future.delayed(Duration(milliseconds: 1000 * retryCount));
+          }
+        } catch (e) {
+          retryCount++;
+          _logger.logOcr('Camera discovery error on attempt $retryCount: $e');
+          if (retryCount >= maxRetries) rethrow;
+          await Future.delayed(Duration(milliseconds: 1000 * retryCount));
+        }
+      }
+      
       if (_cameras == null || _cameras!.isEmpty) {
-        _logger.logOcr('No cameras available', success: false);
+        _logger.logOcr('No cameras available after retries', success: false);
         return false;
       }
 
       _logger.logOcr('Found ${_cameras!.length} cameras');
 
-      // Initialize camera controller with the back camera
+      // Find the best camera (prefer back camera)
       final backCamera = _cameras!.firstWhere(
         (camera) => camera.lensDirection == CameraLensDirection.back,
         orElse: () => _cameras!.first,
       );
 
+      // Dispose existing controller if any
+      if (_cameraController != null) {
+        try {
+          await _cameraController!.dispose();
+        } catch (e) {
+          _logger.logOcr('Warning: Error disposing previous camera controller: $e');
+        }
+        _cameraController = null;
+      }
+
+      // Create new camera controller
       _cameraController = CameraController(
         backCamera,
         ResolutionPreset.high,
@@ -73,24 +105,105 @@ class OcrService extends ChangeNotifier {
         imageFormatGroup: ImageFormatGroup.yuv420,
       );
 
-      await _cameraController!.initialize();
+      // Initialize camera with retry mechanism and longer delays
+      retryCount = 0;
+      while (retryCount < maxRetries) {
+        try {
+          _logger.logOcr('Attempting camera initialization, attempt ${retryCount + 1}');
+          await _cameraController!.initialize();
+          
+          // Verify camera is actually working
+          if (!_cameraController!.value.isInitialized) {
+            throw Exception('Camera controller reports not initialized');
+          }
+          
+          _logger.logOcr('Camera controller initialized successfully');
+          break;
+        } catch (e) {
+          retryCount++;
+          _logger.logOcr('Camera initialization failed on attempt $retryCount: $e');
+          
+          if (retryCount >= maxRetries) {
+            throw Exception('Failed to initialize camera after $maxRetries attempts: $e');
+          }
+          
+          // Dispose and recreate controller for retry
+          try {
+            await _cameraController!.dispose();
+          } catch (_) {}
+          
+          await Future.delayed(Duration(milliseconds: 2000 * retryCount));
+          
+          // Recreate controller for retry
+          _cameraController = CameraController(
+            backCamera,
+            ResolutionPreset.high,
+            enableAudio: false,
+            imageFormatGroup: ImageFormatGroup.yuv420,
+          );
+        }
+      }
+      
       _isInitialized = true;
-
       _logger.logOcr('OCR service initialized successfully');
       notifyListeners();
       return true;
     } catch (e, stackTrace) {
       _logger.logError('Failed to initialize OCR service',
           error: e, stackTrace: stackTrace, category: 'OCR');
+      
+      // Clean up on failure
+      try {
+        _cameraController?.dispose();
+      } catch (_) {}
+      _cameraController = null;
+      _isInitialized = false;
       return false;
     }
   }
 
-  // Capture and process image for text extraction
-  Future<String?> captureAndExtractText() async {
-    if (!_isInitialized || _cameraController == null) {
-      await initialize();
-      if (!_isInitialized) return null;
+  // Check if camera is properly initialized and working
+  bool get isCameraReady {
+    return _isInitialized && 
+           _cameraController != null && 
+           _cameraController!.value.isInitialized;
+  }
+  
+  // Force re-initialization (useful for lifecycle management)
+  Future<bool> reinitialize() async {
+    _logger.logOcr('Force re-initializing OCR service');
+    
+    // Clean up current state
+    _isInitialized = false;
+    try {
+      _cameraController?.dispose();
+    } catch (e) {
+      _logger.logOcr('Warning during cleanup: $e');
+    }
+    _cameraController = null;
+    
+    // Re-initialize
+    return await initialize();
+  }
+
+  // Capture and process image for text extraction with auto-matching
+  Future<Map<String, dynamic>?> captureAndExtractTextWithMatching({
+    required List<dynamic> availableBatches,
+    double similarityThreshold = 0.75,
+  }) async {
+    // Check if camera is ready, if not try to initialize
+    if (!isCameraReady) {
+      _logger.logOcr('Camera not ready, attempting initialization');
+      final initialized = await initialize();
+      if (!initialized || !isCameraReady) {
+        return {
+          'success': false,
+          'extractedText': '',
+          'matches': <BatchMatchResult>[],
+          'nearestMatches': <BatchMatchResult>[],
+          'error': 'Camera initialization failed'
+        };
+      }
     }
 
     if (_isProcessing) {
@@ -104,7 +217,7 @@ class OcrService extends ChangeNotifier {
     final stopwatch = Stopwatch()..start();
 
     try {
-      _logger.logOcr('Capturing image for text extraction');
+      _logger.logOcr('Capturing image for text extraction and matching');
 
       // Capture image
       final XFile imageFile = await _cameraController!.takePicture();
@@ -127,8 +240,38 @@ class OcrService extends ChangeNotifier {
       // Process image for text recognition
       final extractedText = await _processImageForText(image);
       
+      if (extractedText == null || extractedText.isEmpty) {
+        stopwatch.stop();
+        _logger.logOcr('No text extracted from image', success: false);
+        return {
+          'success': false,
+          'extractedText': '',
+          'matches': <BatchMatchResult>[],
+          'nearestMatches': <BatchMatchResult>[],
+          'error': 'No text extracted from image'
+        };
+      }
+
+      // Perform batch matching automatically
+      final matches = findBestBatchMatches(
+        extractedText: extractedText,
+        batches: availableBatches,
+        similarityThreshold: similarityThreshold,
+      );
+
+      // If no matches found, get nearest matches
+      List<BatchMatchResult> nearestMatches = [];
+      if (matches.isEmpty) {
+        nearestMatches = findNearestBatchMatches(
+          extractedText: extractedText,
+          batches: availableBatches,
+          maxResults: 2,
+        );
+        _logger.logOcr('No exact matches found, showing ${nearestMatches.length} nearest matches');
+      }
+
       stopwatch.stop();
-      _logger.logPerformance('OCR text extraction', stopwatch.elapsed);
+      _logger.logPerformance('OCR text extraction and matching', stopwatch.elapsed);
 
       // Clean up the temporary image file
       try {
@@ -138,12 +281,24 @@ class OcrService extends ChangeNotifier {
             level: LogLevel.warning, data: {'error': e.toString()});
       }
 
-      return extractedText;
+      return {
+        'success': true,
+        'extractedText': extractedText,
+        'matches': matches,
+        'nearestMatches': nearestMatches,
+        'confidence': _lastConfidence ?? 0.0,
+      };
     } catch (e, stackTrace) {
       stopwatch.stop();
-      _logger.logError('Failed to capture and extract text',
+      _logger.logError('Failed to capture and process image',
           error: e, stackTrace: stackTrace, category: 'OCR');
-      return null;
+      return {
+        'success': false,
+        'extractedText': '',
+        'matches': <BatchMatchResult>[],
+        'nearestMatches': <BatchMatchResult>[],
+        'error': e.toString()
+      };
     } finally {
       _isProcessing = false;
       notifyListeners();
@@ -324,133 +479,136 @@ class OcrService extends ChangeNotifier {
     }
   }
 
-  /// Fuzzy batch matching using Levenshtein distance and expiry validation
+  /// Enhanced fuzzy batch matching: searches for batch numbers within the extracted text
   /// Returns a list of matches with similarity >= [similarityThreshold] and valid expiry
   List<BatchMatchResult> findBestBatchMatches({
-    required String extractedBatch,
-    required String? extractedExpiry,
+    required String extractedText,
     required List<dynamic> batches, // List<BatchModel> or Map
     double similarityThreshold = 0.75,
   }) {
-    final startTime = DateTime.now();
+    final List<BatchMatchResult> results = [];
+    final normalizedText = extractedText.trim().toUpperCase();
     
     _logger.logOcr('MATCH_START: Beginning batch matching process');
-    _logger.logOcr('MATCH_INPUT_BATCH: Extracted batch text: "$extractedBatch"');
-    _logger.logOcr('MATCH_INPUT_EXPIRY: Extracted expiry: "$extractedExpiry"');
+    _logger.logOcr('MATCH_INPUT_BATCH: Extracted text: "$extractedText"');
     _logger.logOcr('MATCH_AVAILABLE_BATCHES: ${batches.length} batches available for matching');
-    _logger.logOcr('MATCH_THRESHOLD: Similarity threshold: ${(similarityThreshold * 100).toStringAsFixed(1)}%');
-    
-    final List<BatchMatchResult> results = [];
-    final normalizedExtracted = extractedBatch.trim().toUpperCase();
-    
-    _logger.logOcr('MATCH_NORMALIZED: Normalized extracted batch: "$normalizedExtracted"');
-    
-    // Log available batches for comparison
-    _logger.logOcr('MATCH_BATCH_LIST: Available batches:');
-    for (int idx = 0; idx < batches.length; idx++) {
-      final batch = batches[idx];
-      final batchNumber = (batch.batchNumber ?? batch.batchId ?? '').toString();
-      _logger.logOcr('MATCH_AVAILABLE_${idx + 1}: "$batchNumber" | Expires: ${batch.expiryDate}');
-    }
+
+    // Extract potential expiry dates from the text
+    String? extractedExpiry = _extractExpiryFromText(normalizedText);
+    _logger.logOcr('MATCH_INPUT_EXPIRY: Extracted expiry: "${extractedExpiry ?? "null"}"');
     
     for (final batch in batches) {
       final batchNumber = (batch.batchNumber ?? batch.batchId ?? '').toString().trim().toUpperCase();
-      if (batchNumber.isEmpty) {
-        _logger.logOcr('MATCH_SKIP: Skipping batch with empty batch number');
-        continue;
-      }
+      if (batchNumber.isEmpty) continue;
 
-      _logger.logOcr('MATCH_COMPARE: Comparing "$normalizedExtracted" with "$batchNumber"');
-
-      // Check for exact match first
-      if (normalizedExtracted == batchNumber) {
-        _logger.logOcr('MATCH_EXACT: Found exact match! "$normalizedExtracted" = "$batchNumber"');
-        
-        // Check expiry validity for exact match
-        final expiryValid = extractedExpiry != null ? 
-            _isExpiryValid(extractedExpiry, batch.expiryDate ?? '') : true;
-        
-        _logger.logOcr('MATCH_EXACT_EXPIRY: Expiry validation: $expiryValid');
-        
-        results.add(BatchMatchResult(
-          batch: batch,
-          similarity: 1.0, // 100% as decimal
-          expiryValid: expiryValid,
-        ));
-        continue;
-      }
-
-      // Sliding window: compare all substrings of batchNumber with extractedBatch
-      final windowSize = normalizedExtracted.length;
-      double bestSim = 0.0;
-      String bestSubstring = '';
+      // Check if the batch number is contained within the extracted text using fuzzy matching
+      double bestSim = _findBatchInText(batchNumber, normalizedText);
       
-      _logger.logOcr('MATCH_FUZZY_START: Starting fuzzy matching with window size $windowSize');
-      
-      for (int i = 0; i <= batchNumber.length - windowSize; i++) {
-        final sub = batchNumber.substring(i, i + windowSize);
-        final sim = _levenshteinSimilarity(normalizedExtracted, sub);
-        if (sim > bestSim) {
-          bestSim = sim;
-          bestSubstring = sub;
-        }
-      }
-      
-      _logger.logOcr('MATCH_FUZZY_RESULT: Best substring match "$bestSubstring" with ${(bestSim * 100).toStringAsFixed(1)}% similarity');
-      
-      // Also compare full batch number
-      final fullSim = _levenshteinSimilarity(normalizedExtracted, batchNumber);
-      if (fullSim > bestSim) {
-        bestSim = fullSim;
-        bestSubstring = batchNumber;
-      }
-      
-      _logger.logOcr('MATCH_FULL_COMPARISON: Full batch comparison similarity: ${(fullSim * 100).toStringAsFixed(1)}%');
-
-      // Expiry validation (if extractedExpiry is present)
+      // Expiry validation (if extractedExpiry is present and batch has expiry)
       bool expiryValid = true;
       if (extractedExpiry != null && batch.expiryDate != null) {
-        expiryValid = _isExpiryValid(extractedExpiry, batch.expiryDate);
-        _logger.logOcr('MATCH_EXPIRY_CHECK: Expiry validation result: $expiryValid');
-      } else {
-        _logger.logOcr('MATCH_EXPIRY_SKIP: No expiry data to validate');
+        expiryValid = _compareExpiryDates(extractedExpiry, batch.expiryDate.toString());
+        _logger.logOcr('Expiry validation for ${batchNumber}: extracted="$extractedExpiry", batch="${batch.expiryDate}", valid=$expiryValid');
       }
 
-      final similarityPercentage = (bestSim * 100).toStringAsFixed(1);
-      _logger.logOcr('MATCH_THRESHOLD_CHECK: Best similarity $similarityPercentage% vs threshold ${(similarityThreshold * 100).toStringAsFixed(1)}%');
-
+      // Add to results if similarity meets threshold AND expiry is valid (if present)
       if (bestSim >= similarityThreshold && expiryValid) {
-        _logger.logOcr('MATCH_ACCEPTED: Adding batch "${batch.batchNumber}" to results with $similarityPercentage% similarity');
         results.add(BatchMatchResult(
           batch: batch,
           similarity: bestSim,
           expiryValid: expiryValid,
         ));
-      } else {
-        _logger.logOcr('MATCH_REJECTED: Batch "${batch.batchNumber}" rejected - Similarity: $similarityPercentage%, Expiry: $expiryValid');
+        _logger.logOcr('Match found: ${batchNumber} with similarity ${(bestSim * 100).toInt()}% and valid expiry');
       }
     }
-    
-    final processingTime = DateTime.now().difference(startTime).inMilliseconds;
     
     // Sort by similarity descending
     results.sort((a, b) => b.similarity.compareTo(a.similarity));
-    
-    _logger.logOcr('MATCH_COMPLETE: Found ${results.length} matches in ${processingTime}ms');
-    
-    // Log final results
-    if (results.isNotEmpty) {
-      _logger.logOcr('MATCH_RESULTS: Top matches:');
-      for (int i = 0; i < results.length && i < 3; i++) {
-        final result = results[i];
-        final percentage = (result.similarity * 100).toStringAsFixed(1);
-        _logger.logOcr('MATCH_RESULT_${i + 1}: ${result.batch.batchNumber} ($percentage% similarity, Expiry: ${result.expiryValid})');
-      }
-    } else {
-      _logger.logOcr('MATCH_NO_RESULTS: No matches found above threshold');
-    }
+    _logger.logOcr('MATCH_RESULTS: Found ${results.length} matches above threshold');
     
     return results;
+  }
+  
+  /// Find batch number within extracted text using sliding window and fuzzy matching
+  double _findBatchInText(String batchNumber, String extractedText) {
+    double bestSimilarity = 0.0;
+    final batchLength = batchNumber.length;
+    
+    // Try sliding window across the extracted text
+    for (int i = 0; i <= extractedText.length - batchLength; i++) {
+      final window = extractedText.substring(i, i + batchLength);
+      final similarity = _levenshteinSimilarity(batchNumber, window);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+      }
+    }
+    
+    // Also try with different window sizes (±2 characters)
+    for (int offset = -2; offset <= 2; offset++) {
+      final windowSize = batchLength + offset;
+      if (windowSize <= 0 || windowSize > extractedText.length) continue;
+      
+      for (int i = 0; i <= extractedText.length - windowSize; i++) {
+        final window = extractedText.substring(i, i + windowSize);
+        final similarity = _levenshteinSimilarity(batchNumber, window);
+        if (similarity > bestSimilarity) {
+          bestSimilarity = similarity;
+        }
+      }
+    }
+    
+    return bestSimilarity;
+  }
+  
+  /// Extract expiry date from text using multiple patterns
+  String? _extractExpiryFromText(String text) {
+    final expiryPatterns = [
+      RegExp(r'EXP[:\s]*(\d{2}[\/\-]\d{2}[\/\-]\d{4})', caseSensitive: false),
+      RegExp(r'EXPIRY[:\s]*(\d{2}[\/\-]\d{2}[\/\-]\d{4})', caseSensitive: false),
+      RegExp(r'(\d{4}-\d{2}-\d{2})'), // ISO format
+      RegExp(r'(\d{2}[\/\-]\d{2}[\/\-]\d{4})'), // DD/MM/YYYY or MM/DD/YYYY
+      RegExp(r'(\d{2}[\/\-]\d{4})'), // MM/YYYY
+      RegExp(r'(\d{4}[\/\-]\d{2}[\/\-]\d{2})'), // YYYY/MM/DD
+      RegExp(r'EXP[:\s]*(\d{2}[\/\-]\d{4})', caseSensitive: false), // EXP: MM/YYYY
+    ];
+
+    for (final pattern in expiryPatterns) {
+      final match = pattern.firstMatch(text);
+      if (match != null && match.group(1) != null) {
+        return match.group(1)!.trim();
+      }
+    }
+    return null;
+  }
+  
+  /// Find nearest batch matches for fallback when no exact matches found
+  List<BatchMatchResult> findNearestBatchMatches({
+    required String extractedText,
+    required List<dynamic> batches,
+    int maxResults = 2,
+  }) {
+    final List<BatchMatchResult> allMatches = [];
+    final normalizedText = extractedText.trim().toUpperCase();
+    
+    _logger.logOcr('Finding nearest matches with lower threshold');
+    
+    for (final batch in batches) {
+      final batchNumber = (batch.batchNumber ?? batch.batchId ?? '').toString().trim().toUpperCase();
+      if (batchNumber.isEmpty) continue;
+
+      double bestSim = _findBatchInText(batchNumber, normalizedText);
+      
+      // Add all matches regardless of threshold for nearest search
+      allMatches.add(BatchMatchResult(
+        batch: batch,
+        similarity: bestSim,
+        expiryValid: true, // Don't filter by expiry for nearest matches
+      ));
+    }
+    
+    // Sort by similarity and take top results
+    allMatches.sort((a, b) => b.similarity.compareTo(a.similarity));
+    return allMatches.take(maxResults).toList();
   }
 
   /// Levenshtein similarity (1 - normalized distance)
@@ -487,6 +645,30 @@ class OcrService extends ChangeNotifier {
     }
     return d[s.length][t.length];
   }
+
+  /// Expiry date comparison (supports multiple formats)
+  bool _compareExpiryDates(String extracted, String batchExpiry) {
+    final formats = [
+      'dd/MM/yyyy', 'MM/yyyy', 'yyyy-MM-dd', 'dd-MM-yyyy', 'MM-yy', 'MM/yyyy', 'yyyy/MM/dd', 'dd MMM yyyy'
+    ];
+    
+    DateTime? parseDate(String s) {
+      for (final f in formats) {
+        try {
+          return DateFormat(f).parse(s);
+        } catch (_) {}
+      }
+      return null;
+    }
+    
+    final d1 = parseDate(extracted);
+    final d2 = parseDate(batchExpiry);
+    if (d1 == null || d2 == null) return false;
+    
+    // Allow for month/year only matches
+    return d1.year == d2.year && d1.month == d2.month;
+  }
+
   // Switch camera (front/back)
   Future<void> switchCamera() async {
     if (!_isInitialized || _cameras == null || _cameras!.length < 2) {
@@ -573,189 +755,6 @@ class OcrService extends ChangeNotifier {
       _logger.logError('Error checking camera permission',
           error: e, stackTrace: stackTrace, category: 'OCR');
       return false;
-    }
-  }
-
-  // Helper method to validate expiry dates
-  bool _isExpiryValid(String extractedExpiry, String batchExpiry) {
-    try {
-      _logger.logOcr('EXPIRY_CHECK: Comparing extracted "$extractedExpiry" with batch "$batchExpiry"');
-      
-      if (extractedExpiry.isEmpty || batchExpiry.isEmpty) {
-        _logger.logOcr('EXPIRY_CHECK: Empty dates - assuming valid');
-        return true;
-      }
-      
-      // Parse both dates with comprehensive format support
-      final extractedDate = _parseAnyDateFormat(extractedExpiry);
-      final batchDate = _parseAnyDateFormat(batchExpiry);
-      
-      if (extractedDate == null || batchDate == null) {
-        _logger.logOcr('EXPIRY_CHECK: Could not parse dates - assuming valid');
-        _logger.logOcr('EXPIRY_PARSE_FAIL: Extracted: "$extractedExpiry" → $extractedDate, Batch: "$batchExpiry" → $batchDate');
-        return true;
-      }
-      
-      final daysDifference = batchDate.difference(extractedDate).inDays.abs();
-      final isValid = daysDifference <= 30; // Allow 30 days difference
-      
-      _logger.logOcr('EXPIRY_CHECK: Parsed dates - Extracted: ${DateFormat('yyyy-MM-dd').format(extractedDate)}, Batch: ${DateFormat('yyyy-MM-dd').format(batchDate)}');
-      _logger.logOcr('EXPIRY_CHECK: Date difference: $daysDifference days, Valid: $isValid');
-      
-      return isValid;
-      
-    } catch (e) {
-      _logger.logOcr('EXPIRY_CHECK: Error validating expiry - $e, assuming valid');
-      return true;
-    }
-  }
-
-  // Comprehensive date parser supporting ALL possible formats
-  DateTime? _parseAnyDateFormat(String dateStr) {
-    if (dateStr.isEmpty) return null;
-    
-    try {
-      _logger.logOcr('DATE_PARSE_START: Attempting to parse "$dateStr"');
-      
-      // Clean the input
-      String cleanDate = dateStr.trim().replaceAll(RegExp(r'[^\w\-/.]'), ' ').trim();
-      _logger.logOcr('DATE_PARSE_CLEAN: Cleaned to "$cleanDate"');
-      
-      // Comprehensive list of date formats to try
-      final dateFormats = [
-        // DD/MM/YYYY variants
-        'dd/MM/yyyy', 'dd/MM/yy', 'd/M/yyyy', 'd/M/yy',
-        'dd.MM.yyyy', 'dd.MM.yy', 'd.M.yyyy', 'd.M.yy',
-        'dd-MM-yyyy', 'dd-MM-yy', 'd-M-yyyy', 'd-M-yy',
-        
-        // MM/DD/YYYY variants (US format)
-        'MM/dd/yyyy', 'MM/dd/yy', 'M/d/yyyy', 'M/d/yy',
-        'MM.dd.yyyy', 'MM.dd.yy', 'M.d.yyyy', 'M.d.yy',
-        'MM-dd-yyyy', 'MM-dd-yy', 'M-d-yyyy', 'M-d-yy',
-        
-        // YYYY-MM-DD variants (ISO format)
-        'yyyy-MM-dd', 'yyyy-M-d', 'yyyy/MM/dd', 'yyyy/M/d',
-        'yyyy.MM.dd', 'yyyy.M.d',
-        
-        // YYYY-DD-MM variants
-        'yyyy-dd-MM', 'yyyy-d-M', 'yyyy/dd/MM', 'yyyy/d/M',
-        
-        // Month year only formats
-        'MM/yyyy', 'M/yyyy', 'MM-yyyy', 'M-yyyy', 'MM.yyyy', 'M.yyyy',
-        'MMM yyyy', 'MMM-yyyy', 'MMM.yyyy', 'MMM/yyyy',
-        'MMMM yyyy', 'MMMM-yyyy', 'MMMM.yyyy', 'MMMM/yyyy',
-        
-        // DD MMM YYYY formats
-        'dd MMM yyyy', 'd MMM yyyy', 'dd-MMM-yyyy', 'd-MMM-yyyy',
-        'dd.MMM.yyyy', 'd.MMM.yyyy', 'dd/MMM/yyyy', 'd/MMM/yyyy',
-        
-        // MMM DD YYYY formats
-        'MMM dd yyyy', 'MMM d yyyy', 'MMM-dd-yyyy', 'MMM-d-yyyy',
-        'MMM.dd.yyyy', 'MMM.d.yyyy', 'MMM/dd/yyyy', 'MMM/d/yyyy',
-        
-        // Compact formats
-        'ddMMyyyy', 'ddMMyy', 'yyyyMMdd', 'yyyyddMM', 'MMddyyyy',
-        
-        // Edge cases
-        'yyyy', 'yy'
-      ];
-      
-      // Try each format
-      for (String format in dateFormats) {
-        try {
-          final formatter = DateFormat(format);
-          final parsedDate = formatter.parseStrict(cleanDate);
-          
-          _logger.logOcr('DATE_PARSE_SUCCESS: "$cleanDate" parsed as ${DateFormat('yyyy-MM-dd').format(parsedDate)} using format "$format"');
-          return parsedDate;
-          
-        } catch (e) {
-          // Continue to next format
-          continue;
-        }
-      }
-      
-      // Try manual parsing for irregular formats
-      final manualParsed = _tryManualDateParsing(cleanDate);
-      if (manualParsed != null) {
-        _logger.logOcr('DATE_PARSE_MANUAL: "$cleanDate" parsed manually as ${DateFormat('yyyy-MM-dd').format(manualParsed)}');
-        return manualParsed;
-      }
-      
-      _logger.logOcr('DATE_PARSE_FAILED: Could not parse "$dateStr" with any known format');
-      return null;
-      
-    } catch (e) {
-      _logger.logOcr('DATE_PARSE_ERROR: Exception parsing "$dateStr" - $e');
-      return null;
-    }
-  }
-  
-  // Manual parsing for irregular date formats
-  DateTime? _tryManualDateParsing(String dateStr) {
-    try {
-      // Extract numbers from string
-      final numbers = RegExp(r'\d+').allMatches(dateStr).map((m) => int.parse(m.group(0)!)).toList();
-      
-      if (numbers.isEmpty) return null;
-      
-      // Single number - assume year
-      if (numbers.length == 1) {
-        int year = numbers[0];
-        if (year < 100) year += 2000; // Convert 2-digit year
-        if (year < 2000 || year > 2100) return null;
-        return DateTime(year, 12, 31); // End of year
-      }
-      
-      // Two numbers - assume month/year
-      if (numbers.length == 2) {
-        int first = numbers[0];
-        int second = numbers[1];
-        
-        // Try MM/YYYY
-        if (first <= 12 && second > 31) {
-          int year = second < 100 ? second + 2000 : second;
-          return DateTime(year, first, DateTime(year, first + 1, 0).day); // Last day of month
-        }
-        
-        // Try YYYY/MM  
-        if (first > 31 && second <= 12) {
-          int year = first < 100 ? first + 2000 : first;
-          return DateTime(year, second, DateTime(year, second + 1, 0).day); // Last day of month
-        }
-      }
-      
-      // Three numbers - assume DD/MM/YYYY or MM/DD/YYYY or YYYY/MM/DD
-      if (numbers.length == 3) {
-        int first = numbers[0];
-        int second = numbers[1];
-        int third = numbers[2];
-        
-        // Convert 2-digit years
-        if (third < 100) third += 2000;
-        if (first > 1900 && first < 2100) first = first; // Already 4-digit
-        if (second > 1900 && second < 2100) second = second; // Already 4-digit
-        
-        // Try YYYY/MM/DD
-        if (first > 1900 && first < 2100 && second <= 12 && third <= 31) {
-          return DateTime(first, second, third);
-        }
-        
-        // Try DD/MM/YYYY
-        if (third > 1900 && third < 2100 && second <= 12 && first <= 31) {
-          return DateTime(third, second, first);
-        }
-        
-        // Try MM/DD/YYYY
-        if (third > 1900 && third < 2100 && first <= 12 && second <= 31) {
-          return DateTime(third, first, second);
-        }
-      }
-      
-      return null;
-      
-    } catch (e) {
-      return null;
     }
   }
 
