@@ -125,10 +125,21 @@ class _SplashScreenState extends State<SplashScreen>
                                       ),
                                     ],
                                   ),
-                                  child: const Icon(
-                                    Icons.qr_code_scanner,
-                                    size: 60,
-                                    color: AppColors.primary,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(24),
+                                    child: Image.asset(
+                                      'logo/icon.png',
+                                      width: 80,
+                                      height: 80,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return const Icon(
+                                          Icons.medical_services,
+                                          size: 60,
+                                          color: AppColors.secondary,
+                                        );
+                                      },
+                                    ),
                                   ),
                                 ),
                                 
@@ -136,11 +147,11 @@ class _SplashScreenState extends State<SplashScreen>
                                 
                                 // App Name
                                 const Text(
-                                  Constants.appName,
+                                  'Medha AI - Batchmate',
                                   style: TextStyle(
-                                    fontSize: 32,
+                                    fontSize: 28,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                                    color: AppColors.textColor,
                                     letterSpacing: 1.2,
                                   ),
                                 ),

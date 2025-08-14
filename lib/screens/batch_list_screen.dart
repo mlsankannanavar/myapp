@@ -30,7 +30,7 @@ class _BatchListScreenState extends State<BatchListScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this); // Changed from 3 to 2
     _searchController = TextEditingController();
     _scrollController = ScrollController();
     
@@ -60,7 +60,6 @@ class _BatchListScreenState extends State<BatchListScreen>
     return Scaffold(
       appBar: _buildAppBar(),
       body: _buildBody(),
-      floatingActionButton: _buildFloatingActionButton(),
     );
   }
 
@@ -68,15 +67,16 @@ class _BatchListScreenState extends State<BatchListScreen>
     return AppBar(
       title: const Text('Batch History'),
       elevation: 0,
+      backgroundColor: AppColors.primary,
+      foregroundColor: AppColors.textColor,
       bottom: TabBar(
         controller: _tabController,
-        indicatorColor: AppColors.primary,
-        labelColor: AppColors.primary,
+        indicatorColor: AppColors.secondary,
+        labelColor: AppColors.textColor,
         unselectedLabelColor: Colors.grey,
         tabs: const [
-          Tab(text: 'All Batches'),
-          Tab(text: 'Recent'),
-          Tab(text: 'Favorites'),
+          Tab(text: 'Available Batches'),
+          Tab(text: 'Scanned/Submitted'),
         ],
       ),
       actions: [
@@ -149,9 +149,8 @@ class _BatchListScreenState extends State<BatchListScreen>
           child: TabBarView(
             controller: _tabController,
             children: [
-              _buildBatchList('all'),
-              _buildBatchList('recent'),
-              _buildBatchList('favorites'),
+              _buildAvailableBatches(),
+              _buildScannedSubmitted(),
             ],
           ),
         ),
@@ -236,51 +235,6 @@ class _BatchListScreenState extends State<BatchListScreen>
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildBatchList(String tab) {
-    return Consumer<BatchProvider>(
-      builder: (context, batchProvider, child) {
-        if (batchProvider.isLoading) {
-          return const LoadingWidget(
-            message: 'Loading batch history...',
-          );
-        }
-
-        if (batchProvider.errorMessage != null) {
-          return CustomErrorWidget(
-            title: 'Error Loading Batches',
-            message: batchProvider.errorMessage!,
-            onRetry: () => batchProvider.loadBatchHistory(),
-          );
-        }
-
-        List<BatchModel> batches;
-        switch (tab) {
-          case 'recent':
-            batches = batchProvider.recentBatches;
-            break;
-          case 'favorites':
-            batches = batchProvider.favoriteBatches;
-            break;
-          default:
-            batches = batchProvider.allBatches;
-        }
-
-        final filteredBatches = _getFilteredBatches(batches);
-
-        if (filteredBatches.isEmpty) {
-          return _buildEmptyState(tab);
-        }
-
-        return RefreshIndicator(
-          onRefresh: () => batchProvider.loadBatchHistory(),
-          child: _isGridView
-              ? _buildGridView(filteredBatches)
-              : _buildListView(filteredBatches),
-        );
-      },
     );
   }
 
@@ -402,13 +356,173 @@ class _BatchListScreenState extends State<BatchListScreen>
     );
   }
 
-  Widget _buildFloatingActionButton() {
-    return FloatingActionButton.extended(
-      onPressed: _navigateToQRScanner,
-      backgroundColor: AppColors.primary,
-      foregroundColor: Colors.white,
-      icon: const Icon(Icons.qr_code_scanner),
-      label: const Text('Scan Batch'),
+  Widget _buildAvailableBatches() {
+    return Consumer<BatchProvider>(
+      builder: (context, batchProvider, child) {
+        if (batchProvider.isLoading) {
+          return const LoadingWidget(message: 'Loading available batches...');
+        }
+
+        if (batchProvider.errorMessage != null) {
+          return CustomErrorWidget(
+            title: 'Error Loading Batches',
+            message: batchProvider.errorMessage!,
+            onRetry: () => batchProvider.loadBatchesForCurrentSession(),
+          );
+        }
+
+        final availableBatches = batchProvider.batches;
+
+        if (availableBatches.isEmpty) {
+          return _buildEmptyAvailableState();
+        }
+
+        return RefreshIndicator(
+          onRefresh: () => batchProvider.loadBatchesForCurrentSession(),
+          child: _isGridView
+              ? _buildGridView(availableBatches)
+              : _buildListView(availableBatches),
+        );
+      },
+    );
+  }
+
+  Widget _buildScannedSubmitted() {
+    return Consumer<BatchProvider>(
+      builder: (context, batchProvider, child) {
+        final submittedBatches = batchProvider.getSubmittedBatches();
+
+        if (submittedBatches.isEmpty) {
+          return _buildEmptySubmittedState();
+        }
+
+        return RefreshIndicator(
+          onRefresh: () => batchProvider.loadSubmittedBatches(),
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: submittedBatches.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              return _buildSubmittedBatchCard(submittedBatches[index]);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSubmittedBatchCard(dynamic submittedBatch) {
+    return Card(
+      color: AppColors.cardBackground,
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Batch: ${submittedBatch['batchNumber'] ?? 'Unknown'}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('Item: ${submittedBatch['itemName'] ?? 'Unknown'}'),
+            Text('Quantity: ${submittedBatch['quantity'] ?? 'Unknown'}'),
+            Text('Submitted: ${submittedBatch['submittedAt'] ?? 'Unknown'}'),
+            if (submittedBatch['capturedImage'] != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                height: 100,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.borderColor),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Image.memory(
+                  submittedBatch['capturedImage'],
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Center(
+                      child: Icon(Icons.image_not_supported, color: Colors.grey),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyAvailableState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.inventory_2_outlined,
+            size: 64,
+            color: Colors.grey[400],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No Available Batches',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Scan a QR code to load batches for a session',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptySubmittedState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.upload_outlined,
+            size: 64,
+            color: Colors.grey[400],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No Submitted Batches',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Start scanning and submitting batches to see them here',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 

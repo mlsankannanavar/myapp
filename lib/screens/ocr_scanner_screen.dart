@@ -26,6 +26,7 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
   bool _isFlashOn = false;
   String? _capturedImagePath;
   String? _extractedText;
+  List<int>? _lastCapturedImageBytes;
   
   @override
   void initState() {
@@ -315,6 +316,15 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
       
       if (resp.isSuccess) {
         batchProvider.incrementSuccessCount();
+        
+        // Add to submitted batches list
+        await batchProvider.addSubmittedBatch(
+          batchNumber: batch.batchNumber ?? batch.batchId ?? '',
+          itemName: batch.productName ?? 'Unknown Item',
+          quantity: quantity.toString(),
+          capturedImage: _lastCapturedImageBytes,
+        );
+        
         loggingProvider.logSuccess('Batch submitted successfully');
         _showSuccessDialog('Batch submitted successfully!');
         _resetCapture(); // Reset for next scan
@@ -915,10 +925,12 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
       final extractedText = result['extractedText'] as String;
       final matches = result['matches'] as List<dynamic>;
       final nearestMatches = result['nearestMatches'] as List<dynamic>;
+      final imageBytes = result['imageBytes'] as List<int>?;
 
       setState(() {
         _extractedText = extractedText;
         _capturedImagePath = 'captured'; // Just to indicate capture was successful
+        _lastCapturedImageBytes = imageBytes;
       });
 
       loggingProvider.logSuccess('OCR processing completed with auto-matching', data: {

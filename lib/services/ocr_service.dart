@@ -222,6 +222,9 @@ class OcrService extends ChangeNotifier {
       // Capture image
       final XFile imageFile = await _cameraController!.takePicture();
       final File image = File(imageFile.path);
+      
+      // Read image bytes for storage
+      final imageBytes = await image.readAsBytes();
 
       // Log image details
       final imageStats = await image.stat();
@@ -287,6 +290,7 @@ class OcrService extends ChangeNotifier {
         'matches': matches,
         'nearestMatches': nearestMatches,
         'confidence': _lastConfidence ?? 0.0,
+        'imageBytes': imageBytes,
       };
     } catch (e, stackTrace) {
       stopwatch.stop();

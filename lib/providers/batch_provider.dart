@@ -680,6 +680,71 @@ class BatchProvider extends ChangeNotifier {
     }
   }
 
+  // Submitted batches management
+  List<Map<String, dynamic>> _submittedBatches = [];
+  
+  List<Map<String, dynamic>> getSubmittedBatches() {
+    return List.unmodifiable(_submittedBatches);
+  }
+  
+  Future<void> addSubmittedBatch({
+    required String batchNumber,
+    required String itemName,
+    required String quantity,
+    required List<int>? capturedImage,
+  }) async {
+    final submittedBatch = {
+      'batchNumber': batchNumber,
+      'itemName': itemName,
+      'quantity': quantity,
+      'capturedImage': capturedImage,
+      'submittedAt': DateTime.now().toIso8601String(),
+      'sessionId': _currentSessionId,
+    };
+    
+    _submittedBatches.add(submittedBatch);
+    notifyListeners();
+    
+    // Save to storage if needed
+    if (_batchBox != null) {
+      final storageData = {
+        'batches': _submittedBatches.map((e) => Map<String, dynamic>.from(e)).toList(),
+        'lastUpdated': DateTime.now().toIso8601String(),
+      };
+      await _batchBox!.put('submitted_batches', storageData);
+    }
+    
+    _logger.logApp('Batch submitted: $batchNumber');
+  }
+  
+  Future<void> loadSubmittedBatches() async {
+    try {
+      if (_batchBox != null) {
+        final stored = _batchBox!.get('submitted_batches');
+        if (stored != null && stored is Map) {
+          final batchesList = stored['batches'] as List?;
+          if (batchesList != null) {
+            _submittedBatches = List<Map<String, dynamic>>.from(
+              batchesList.map((e) => Map<String, dynamic>.from(e as Map))
+            );
+            notifyListeners();
+          }
+        }
+      }
+    } catch (e) {
+      _logger.logError('Failed to load submitted batches: $e');
+    }
+  }
+  
+  Future<void> loadBatchesForCurrentSession() async {
+    if (_currentSessionId == null) {
+      _logger.logWarning('No current session to load batches for');
+      return;
+    }
+    
+    await loadBatchesForSession(_currentSessionId!);
+  }
+
   // Log operation helper
   void _logOperation(String message, {
     LogLevel level = LogLevel.info,

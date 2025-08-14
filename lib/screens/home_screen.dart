@@ -117,21 +117,33 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: _buildBody(),
         ),
       ),
-      floatingActionButton: _buildFloatingActionButton(),
     );
   }
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      title: const Text(
-        'BatchMate',
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 24,
-        ),
+      title: Row(
+        children: [
+          Image.asset(
+            'logo/icon.png',
+            height: 32,
+            width: 32,
+            errorBuilder: (context, error, stackTrace) {
+              return Icon(Icons.medical_services, size: 32, color: AppColors.textColor);
+            },
+          ),
+          const SizedBox(width: 12),
+          const Text(
+            'Medha AI - Batchmate',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+            ),
+          ),
+        ],
       ),
       backgroundColor: AppColors.primary,
-      foregroundColor: Colors.white,
+      foregroundColor: AppColors.textColor,
       elevation: 0,
       actions: [
         Consumer<AppStateProvider>(
@@ -635,16 +647,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildFloatingActionButton() {
-    return FloatingActionButton.extended(
-      onPressed: () => _showQuickActionMenu(),
-      backgroundColor: AppColors.primary,
-      foregroundColor: Colors.white,
-      icon: const Icon(Icons.add),
-      label: const Text('Quick Scan'),
     );
   }
 

@@ -525,7 +525,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
               TextButton(
                 onPressed: () {
                   Navigator.of(context).pop();
-                  Navigator.of(context).pushReplacementNamed('/home');
+                  Navigator.of(context).pushReplacementNamed('/batch-list');
                 },
                 child: const Text('View Dashboard'),
               ),
@@ -535,7 +535,8 @@ class _QRScannerScreenState extends State<QRScannerScreen>
                   Navigator.of(context).pushReplacementNamed('/ocr-scanner');
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
+                  backgroundColor: AppColors.secondary,
+                  foregroundColor: AppColors.primary,
                 ),
                 child: const Text('Start Scanning Batches'),
               ),
