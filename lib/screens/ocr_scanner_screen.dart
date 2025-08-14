@@ -258,30 +258,71 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
                     children: [
                       Icon(Icons.warning, color: Colors.red.shade700, size: 20),
                       const SizedBox(width: 8),
-                      Text(
-                        'Expiry Date Validation Failed',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red.shade700,
+                      Expanded(
+                        child: Text(
+                          'High Confidence Batch Match Found',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red.shade700,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'A high-confidence batch match was found, but the expiry date from the scanned text doesn\'t match the batch expiry date.',
+                    'The scanned batch number has high similarity ($confidence%), but the expiry date from the label doesn\'t match the expected expiry date for this batch.',
                     style: TextStyle(color: Colors.red.shade700),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-            Text('Batch Details:', style: TextStyle(fontWeight: FontWeight.bold)),
-            Text('Batch Number: ${batch.batchNumber ?? batch.batchId}'),
-            if (batch.itemName != null)
-              Text('Item: ${batch.itemName}'),
-            if (batch.expiryDate != null)
-              Text('Expected Expiry: ${batch.expiryDate}'),
+            Text('Batch Match Details:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.inventory_2, color: Colors.blue, size: 16),
+                      const SizedBox(width: 4),
+                      Text('Batch Number: ', style: TextStyle(fontWeight: FontWeight.w500)),
+                      Text('${batch.batchNumber ?? batch.batchId}'),
+                    ],
+                  ),
+                  if (batch.itemName != null) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.medication, color: Colors.green, size: 16),
+                        const SizedBox(width: 4),
+                        Text('Item: ', style: TextStyle(fontWeight: FontWeight.w500)),
+                        Expanded(child: Text('${batch.itemName}')),
+                      ],
+                    ),
+                  ],
+                  if (batch.expiryDate != null) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.calendar_today, color: Colors.orange, size: 16),
+                        const SizedBox(width: 4),
+                        Text('Expected Expiry: ', style: TextStyle(fontWeight: FontWeight.w500)),
+                        Text('${batch.expiryDate}'),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
@@ -295,10 +336,45 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
                   Icon(Icons.analytics, color: Colors.orange.shade700),
                   const SizedBox(width: 8),
                   Text(
-                    'Batch Confidence: $confidence%',
+                    'Batch Similarity: $confidence%',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.orange.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info, color: Colors.amber.shade700, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Important Safety Notice',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Pharmaceutical expiry dates are critical for patient safety. Please verify the batch details carefully before proceeding.',
+                    style: TextStyle(
+                      color: Colors.amber.shade800,
+                      fontSize: 13,
                     ),
                   ),
                 ],

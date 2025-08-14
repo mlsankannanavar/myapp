@@ -275,7 +275,8 @@ class _BatchListScreenState extends State<BatchListScreen>
   }
 
   Widget _buildEmptyState(String tab) {
-    String title, subtitle, actionText;
+    String title, subtitle;
+    String? actionText;
     IconData icon;
     VoidCallback? onAction;
 
@@ -284,8 +285,7 @@ class _BatchListScreenState extends State<BatchListScreen>
         title = 'No recent batches';
         subtitle = 'Batches you\'ve scanned recently will appear here';
         icon = Icons.schedule;
-        actionText = 'Scan QR Code';
-        onAction = _navigateToQRScanner;
+        // Remove QR scan action for recent tab
         break;
       case 'favorites':
         title = 'No favorite batches';
@@ -302,11 +302,10 @@ class _BatchListScreenState extends State<BatchListScreen>
           actionText = 'Clear Search';
           onAction = _clearSearch;
         } else {
-          title = 'No batches scanned yet';
-          subtitle = 'Start by scanning your first batch QR code';
-          icon = Icons.qr_code_scanner;
-          actionText = 'Scan QR Code';
-          onAction = _navigateToQRScanner;
+          title = 'No batches available';
+          subtitle = 'Available batches will appear here once a session is loaded';
+          icon = Icons.inventory_2_outlined;
+          // Remove QR scan action for default empty state
         }
     }
 
@@ -341,11 +340,12 @@ class _BatchListScreenState extends State<BatchListScreen>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: onAction,
-              icon: Icon(icon),
-              label: Text(actionText),
-              style: ElevatedButton.styleFrom(
+            if (actionText != null && onAction != null)
+              ElevatedButton.icon(
+                onPressed: onAction,
+                icon: Icon(icon),
+                label: Text(actionText),
+                style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                 ),
@@ -586,13 +586,6 @@ class _BatchListScreenState extends State<BatchListScreen>
     loggingProvider.logApp('Batch details viewed', data: {'batchId': batch.id});
 
     _showBatchDetails(batch);
-  }
-
-  void _navigateToQRScanner() {
-    final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
-    loggingProvider.logApp('Navigate to QR scanner from batch list');
-
-    Navigator.pushNamed(context, '/qr-scanner');
   }
 
   // Helper methods

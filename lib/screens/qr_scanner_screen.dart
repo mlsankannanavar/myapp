@@ -522,23 +522,16 @@ class _QRScannerScreenState extends State<QRScannerScreen>
               ],
             ),
             actions: [
-              TextButton(
+              ElevatedButton(
                 onPressed: () {
                   Navigator.of(context).pop();
                   Navigator.of(context).pushReplacementNamed('/batch-list');
                 },
-                child: const Text('View Dashboard'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushReplacementNamed('/ocr-scanner');
-                },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.secondary,
-                  foregroundColor: AppColors.primary,
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.buttonText,
                 ),
-                child: const Text('Start Scanning Batches'),
+                child: const Text('OK'),
               ),
             ],
           );

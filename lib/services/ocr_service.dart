@@ -585,6 +585,8 @@ class OcrService extends ChangeNotifier {
   
   /// Extract expiry date from text using multiple patterns
   String? _extractExpiryFromText(String text) {
+    _logger.logOcr('EXPIRY_EXTRACT: Starting extraction from: "$text"');
+    
     final expiryPatterns = [
       RegExp(r'EXP[:\s]*(\d{2}[\/\-]\d{2}[\/\-]\d{4})', caseSensitive: false),
       RegExp(r'EXPIRY[:\s]*(\d{2}[\/\-]\d{2}[\/\-]\d{4})', caseSensitive: false),
@@ -593,15 +595,117 @@ class OcrService extends ChangeNotifier {
       RegExp(r'(\d{2}[\/\-]\d{4})'), // MM/YYYY
       RegExp(r'(\d{4}[\/\-]\d{2}[\/\-]\d{2})'), // YYYY/MM/DD
       RegExp(r'EXP[:\s]*(\d{2}[\/\-]\d{4})', caseSensitive: false), // EXP: MM/YYYY
+      // Enhanced patterns for month name abbreviations with more flexibility
+      RegExp(r'(\d{4}[-\/\s]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[-\/\s]*\d{1,2})', caseSensitive: false), // YYYY-MMM-DD
+      RegExp(r'(\d{1,2}[-\/\s]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[-\/\s]*\d{4})', caseSensitive: false), // DD-MMM-YYYY
+      RegExp(r'(\d{4}[-\/\s]*(january|february|march|april|may|june|july|august|september|october|november|december)[-\/\s]*\d{1,2})', caseSensitive: false), // Full month names
+      RegExp(r'(\d{1,2}[-\/\s]*(january|february|march|april|may|june|july|august|september|october|november|december)[-\/\s]*\d{4})', caseSensitive: false), // DD-Month-YYYY
+      // Catch all pattern for any sequence that looks like a date with month names
+      RegExp(r'(\d{4}.*?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec).*?\d{1,2})', caseSensitive: false),
+      RegExp(r'(\d{1,2}.*?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec).*?\d{4})', caseSensitive: false),
     ];
 
     for (final pattern in expiryPatterns) {
       final match = pattern.firstMatch(text);
       if (match != null && match.group(1) != null) {
-        return match.group(1)!.trim();
+        String extractedDate = match.group(1)!.trim();
+        _logger.logOcr('EXPIRY_EXTRACT: Raw match found: "$extractedDate"');
+        
+        // Convert month names to numbers for consistency
+        String normalized = _normalizeMonthNames(extractedDate);
+        _logger.logOcr('EXPIRY_EXTRACT: Normalized to: "$normalized"');
+        
+        // Validate the normalized date
+        if (_isValidDateFormat(normalized)) {
+          return normalized;
+        }
       }
     }
+    
+    _logger.logOcr('EXPIRY_EXTRACT: No valid expiry date found');
     return null;
+  }
+  
+  /// Validate if the normalized date string is in a proper format
+  bool _isValidDateFormat(String dateStr) {
+    try {
+      // Try parsing as various formats
+      final formats = ['yyyy-MM-dd', 'dd-MM-yyyy', 'MM-dd-yyyy', 'MM-yyyy'];
+      
+      for (final format in formats) {
+        try {
+          final date = DateFormat(format).parseStrict(dateStr);
+          // Check if it's a reasonable expiry date (not too far in past/future)
+          final now = DateTime.now();
+          final minDate = now.subtract(Duration(days: 365)); // 1 year ago
+          final maxDate = now.add(Duration(days: 365 * 10)); // 10 years future
+          
+          if (date.isAfter(minDate) && date.isBefore(maxDate)) {
+            _logger.logOcr('EXPIRY_VALIDATE: Valid date parsed with format $format: $date');
+            return true;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      _logger.logOcr('EXPIRY_VALIDATE: Date validation failed for: "$dateStr"');
+      return false;
+    } catch (e) {
+      _logger.logOcr('EXPIRY_VALIDATE: Error validating date "$dateStr": $e');
+      return false;
+    }
+  }
+  
+  /// Convert month names/abbreviations to numeric format for consistent parsing
+  String _normalizeMonthNames(String dateStr) {
+    final monthMap = {
+      'jan': '01', 'january': '01',
+      'feb': '02', 'february': '02',
+      'mar': '03', 'march': '03',
+      'apr': '04', 'april': '04',
+      'may': '05',
+      'jun': '06', 'june': '06',
+      'jul': '07', 'july': '07',
+      'aug': '08', 'august': '08',
+      'sep': '09', 'september': '09',
+      'oct': '10', 'october': '10',
+      'nov': '11', 'november': '11',
+      'dec': '12', 'december': '12',
+    };
+    
+    String normalized = dateStr.toLowerCase();
+    _logger.logOcr('MONTH_NORMALIZE: Input: "$normalized"');
+    
+    // Replace month names/abbreviations with numbers
+    for (final entry in monthMap.entries) {
+      if (normalized.contains(entry.key)) {
+        normalized = normalized.replaceAll(entry.key, entry.value);
+        _logger.logOcr('MONTH_NORMALIZE: Replaced ${entry.key} with ${entry.value}: "$normalized"');
+        break;
+      }
+    }
+    
+    // Normalize separators to dashes for consistent parsing
+    normalized = normalized.replaceAll(RegExp(r'[\/\s]+'), '-');
+    
+    // Clean up any extra characters or multiple dashes
+    normalized = normalized.replaceAll(RegExp(r'-+'), '-');
+    normalized = normalized.replaceAll(RegExp(r'[^0-9\-]'), '');
+    
+    // Ensure proper formatting (pad single digits)
+    final parts = normalized.split('-');
+    if (parts.length >= 3) {
+      for (int i = 0; i < parts.length; i++) {
+        if (parts[i].length == 1) {
+          parts[i] = '0${parts[i]}';
+        }
+      }
+      normalized = parts.join('-');
+    }
+    
+    _logger.logOcr('MONTH_NORMALIZE: Final result: "$normalized"');
+    return normalized;
   }
   
   /// Find nearest batch matches for fallback when no exact matches found
@@ -672,24 +776,59 @@ class OcrService extends ChangeNotifier {
   /// Expiry date comparison (supports multiple formats)
   bool _compareExpiryDates(String extracted, String batchExpiry) {
     final formats = [
-      'dd/MM/yyyy', 'MM/yyyy', 'yyyy-MM-dd', 'dd-MM-yyyy', 'MM-yy', 'MM/yyyy', 'yyyy/MM/dd', 'dd MMM yyyy'
+      'dd/MM/yyyy', 'MM/yyyy', 'yyyy-MM-dd', 'dd-MM-yyyy', 'MM-yy', 'MM/yyyy', 
+      'yyyy/MM/dd', 'dd MMM yyyy', 'yyyy-MM-dd', 'dd-MM-yyyy', 'MM-dd-yyyy'
     ];
     
     DateTime? parseDate(String s) {
+      // Clean the string first
+      String cleaned = s.trim().replaceAll(RegExp(r'\s+'), ' ');
+      
       for (final f in formats) {
         try {
-          return DateFormat(f).parse(s);
+          return DateFormat(f).parse(cleaned);
         } catch (_) {}
       }
+      
+      // Try parsing with flexible separators
+      try {
+        // Handle YYYY-MM-DD format specifically
+        final parts = cleaned.split(RegExp(r'[-\/\s]+'));
+        if (parts.length >= 3) {
+          final year = int.tryParse(parts[0]);
+          final month = int.tryParse(parts[1]);
+          final day = int.tryParse(parts[2]);
+          
+          if (year != null && month != null && day != null && 
+              year >= 2000 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+            return DateTime(year, month, day);
+          }
+        }
+      } catch (_) {}
+      
       return null;
     }
     
+    _logger.logOcr('Comparing expiry dates: extracted="$extracted", batch="$batchExpiry"');
+    
     final d1 = parseDate(extracted);
     final d2 = parseDate(batchExpiry);
-    if (d1 == null || d2 == null) return false;
     
-    // Allow for month/year only matches
-    return d1.year == d2.year && d1.month == d2.month;
+    _logger.logOcr('Parsed dates: extracted=$d1, batch=$d2');
+    
+    if (d1 == null || d2 == null) {
+      _logger.logOcr('Failed to parse one or both dates for comparison');
+      return false;
+    }
+    
+    // Allow for month/year only matches, but also do exact date comparison
+    final sameMonthYear = d1.year == d2.year && d1.month == d2.month;
+    final exactMatch = d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
+    
+    _logger.logOcr('Date comparison: sameMonthYear=$sameMonthYear, exactMatch=$exactMatch');
+    
+    // Consider it a match if same month/year (for loose validation) but log exact match status
+    return sameMonthYear;
   }
 
   // Switch camera (front/back)
