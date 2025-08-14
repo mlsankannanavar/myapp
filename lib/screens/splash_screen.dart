@@ -125,18 +125,16 @@ class _SplashScreenState extends State<SplashScreen>
                                       ),
                                     ],
                                   ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(24),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
                                     child: Image.asset(
                                       'logo/icon.png',
-                                      width: 80,
-                                      height: 80,
                                       fit: BoxFit.contain,
                                       errorBuilder: (context, error, stackTrace) {
                                         return const Icon(
                                           Icons.medical_services,
                                           size: 60,
-                                          color: AppColors.secondary,
+                                          color: AppColors.primary,
                                         );
                                       },
                                     ),

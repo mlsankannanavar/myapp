@@ -226,6 +226,109 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     ) ?? false;
   }
 
+  Future<bool> _showExpiryMismatchConfirmationDialog(dynamic batch, int confidence) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.warning,
+              color: Colors.red,
+            ),
+            const SizedBox(width: 8),
+            Text('Expiry Date Mismatch'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.warning, color: Colors.red.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Expiry Date Validation Failed',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'A high-confidence batch match was found, but the expiry date from the scanned text doesn\'t match the batch expiry date.',
+                    style: TextStyle(color: Colors.red.shade700),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Batch Details:', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('Batch Number: ${batch.batchNumber ?? batch.batchId}'),
+            if (batch.itemName != null)
+              Text('Item: ${batch.itemName}'),
+            if (batch.expiryDate != null)
+              Text('Expected Expiry: ${batch.expiryDate}'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.analytics, color: Colors.orange.shade700),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Batch Confidence: $confidence%',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Do you want to proceed with this batch despite the expiry date mismatch?',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Proceed Anyway'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
   Future<void> _showManualBatchSelection(List<dynamic> nearestMatches, String extractedText) async {
     dynamic selectedBatch;
     
@@ -943,10 +1046,27 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
 
       // Handle matching results automatically
       if (matches.isNotEmpty) {
-        // Found exact matches
         final bestMatch = matches.first;
         final batch = bestMatch.batch;
         final confidence = (bestMatch.similarity * 100).toInt();
+        
+        // Check if this is a high-confidence match with expiry mismatch
+        if (!bestMatch.expiryValid) {
+          loggingProvider.logWarning('High confidence batch match found but expiry date mismatch: ${batch.batchNumber ?? batch.batchId}, Confidence: $confidence%');
+          
+          // Show expiry confirmation dialog
+          final confirmed = await _showExpiryMismatchConfirmationDialog(batch, confidence);
+          if (!confirmed) {
+            // User rejected, show manual selection if other options available
+            if (nearestMatches.isNotEmpty) {
+              await _showManualBatchSelection(nearestMatches, extractedText);
+            } else {
+              _showInfoDialog('Batch match found but expiry date doesn\'t match. Please verify manually.');
+            }
+            return;
+          }
+          // User confirmed, proceed with submission
+        }
         
         loggingProvider.logSuccess('Batch match found: ${batch.batchNumber ?? batch.batchId}, Confidence: $confidence%');
         

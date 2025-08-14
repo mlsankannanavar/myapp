@@ -491,6 +491,7 @@ class OcrService extends ChangeNotifier {
     double similarityThreshold = 0.75,
   }) {
     final List<BatchMatchResult> results = [];
+    final List<BatchMatchResult> expiryMismatchResults = [];
     final normalizedText = extractedText.trim().toUpperCase();
     
     _logger.logOcr('MATCH_START: Beginning batch matching process');
@@ -515,20 +516,38 @@ class OcrService extends ChangeNotifier {
         _logger.logOcr('Expiry validation for ${batchNumber}: extracted="$extractedExpiry", batch="${batch.expiryDate}", valid=$expiryValid');
       }
 
-      // Add to results if similarity meets threshold AND expiry is valid (if present)
-      if (bestSim >= similarityThreshold && expiryValid) {
-        results.add(BatchMatchResult(
-          batch: batch,
-          similarity: bestSim,
-          expiryValid: expiryValid,
-        ));
-        _logger.logOcr('Match found: ${batchNumber} with similarity ${(bestSim * 100).toInt()}% and valid expiry');
+      // Add to appropriate results list based on similarity and expiry validation
+      if (bestSim >= similarityThreshold) {
+        if (expiryValid) {
+          results.add(BatchMatchResult(
+            batch: batch,
+            similarity: bestSim,
+            expiryValid: true,
+          ));
+          _logger.logOcr('Match found: ${batchNumber} with similarity ${(bestSim * 100).toInt()}% and valid expiry');
+        } else {
+          // High similarity but expiry mismatch - add to separate list for user confirmation
+          expiryMismatchResults.add(BatchMatchResult(
+            batch: batch,
+            similarity: bestSim,
+            expiryValid: false,
+          ));
+          _logger.logOcr('High similarity match found with expiry mismatch: ${batchNumber} similarity ${(bestSim * 100).toInt()}%');
+        }
       }
     }
     
-    // Sort by similarity descending
+    // Sort both lists by similarity descending
     results.sort((a, b) => b.similarity.compareTo(a.similarity));
-    _logger.logOcr('MATCH_RESULTS: Found ${results.length} matches above threshold');
+    expiryMismatchResults.sort((a, b) => b.similarity.compareTo(a.similarity));
+    
+    // If no exact matches but have high similarity matches with expiry mismatch, add them for user decision
+    if (results.isEmpty && expiryMismatchResults.isNotEmpty) {
+      results.addAll(expiryMismatchResults);
+      _logger.logOcr('MATCH_RESULTS: No exact matches found, but ${expiryMismatchResults.length} high-similarity matches with expiry mismatch available for user confirmation');
+    } else {
+      _logger.logOcr('MATCH_RESULTS: Found ${results.length} exact matches above threshold');
+    }
     
     return results;
   }

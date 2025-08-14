@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Organization primary colors
-  static const Color primary = Color(0xFFFFFFFF); // White
-  static const Color primaryHover = Color(0xFFF0F0F0); // Light gray hover
-  static const Color secondary = Color(0xFF2196F3); // Blue
+  // Organization primary colors - Better visibility
+  static const Color primary = Color(0xFF2196F3); // Blue primary (was white)
+  static const Color primaryHover = Color(0xFF1976D2); // Darker blue hover
+  static const Color secondary = Color(0xFF03DAC6); // Teal secondary
   
   // Status colors
   static const Color success = Color(0xFF10b981); // Green
@@ -12,11 +12,12 @@ class AppColors {
   
   // Background and text
   static const Color background = Color(0xFFf5f5f5); // Light gray background
-  static const Color textColor = Color(0xFF000000); // Black text
+  static const Color textColor = Color(0xFF212121); // Dark text
+  static const Color textSecondary = Color(0xFF757575); // Gray text
   
-  // Button colors
-  static const Color buttonColor = Color(0xFFF8BBD0); // Pink
-  static const Color buttonHover = Color(0xFFF48FB1); // Darker pink hover
+  // Button colors - Better contrast
+  static const Color buttonColor = Color(0xFF2196F3); // Blue buttons
+  static const Color buttonHover = Color(0xFF1976D2); // Darker blue hover
   
   // Border
   static const Color borderColor = Color(0xFFe5e7eb); // Light border
@@ -34,7 +35,7 @@ class AppColors {
   
   // Surface colors
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color onSurface = Color(0xFF000000);
+  static const Color onSurface = Color(0xFF212121);
   static const Color onSurfaceVariant = Color(0xFF757575);
   
   // Status colors
@@ -47,12 +48,11 @@ class AppColors {
   static const Color cardShadow = Color(0x1A000000);
   
   // Button text
-  static const Color buttonText = Color(0xFF000000);
+  static const Color buttonText = Color(0xFFFFFFFF); // White text on colored buttons
   static const Color buttonDisabled = Color(0xFFBDBDBD);
   
   // Text colors
-  static const Color textPrimary = Color(0xFF000000);
-  static const Color textSecondary = Color(0xFF757575);
+  static const Color textPrimary = Color(0xFF212121);
   static const Color textHint = Color(0xFFBDBDBD);
   
   // Border colors

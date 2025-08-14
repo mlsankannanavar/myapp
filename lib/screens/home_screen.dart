@@ -124,13 +124,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return AppBar(
       title: Row(
         children: [
-          Image.asset(
-            'logo/icon.png',
-            height: 32,
+          Container(
             width: 32,
-            errorBuilder: (context, error, stackTrace) {
-              return Icon(Icons.medical_services, size: 32, color: AppColors.textColor);
-            },
+            height: 32,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Image.asset(
+                'logo/icon.png',
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return Icon(Icons.medical_services, size: 24, color: AppColors.primary);
+                },
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           const Text(
@@ -143,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ],
       ),
       backgroundColor: AppColors.primary,
-      foregroundColor: AppColors.textColor,
+      foregroundColor: AppColors.buttonText,
       elevation: 0,
       actions: [
         Consumer<AppStateProvider>(
