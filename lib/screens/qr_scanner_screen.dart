@@ -6,6 +6,7 @@ import '../providers/logging_provider.dart';
 import '../widgets/loading_widget.dart';
 import '../widgets/error_widget.dart';
 import '../utils/app_colors.dart';
+import 'home_screen.dart';
 
 class QRScannerScreen extends StatefulWidget {
   const QRScannerScreen({super.key});
@@ -524,14 +525,18 @@ class _QRScannerScreenState extends State<QRScannerScreen>
             actions: [
               ElevatedButton(
                 onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushReplacementNamed('/batch-list');
+                  Navigator.of(context).pop(); // Close dialog
+                  // Navigate to home screen and clear the entire navigation stack
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => const HomeScreen()),
+                    (route) => false,
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: AppColors.buttonText,
                 ),
-                child: const Text('OK'),
+                child: const Text('Continue to Home'),
               ),
             ],
           );

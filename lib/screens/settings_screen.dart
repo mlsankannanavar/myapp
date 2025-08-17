@@ -310,7 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               ListTile(
                 title: const Text('API Endpoint'),
-                subtitle: const Text(Constants.apiBaseUrl),
+                subtitle: Text(appState.apiBaseUrl),
                 leading: const Icon(Icons.api),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -674,17 +674,141 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showApiSettings() {
     final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
+    final appStateProvider = Provider.of<AppStateProvider>(context, listen: false);
+    
     loggingProvider.logApp('API settings opened');
+
+    final TextEditingController urlController = TextEditingController(
+      text: appStateProvider.apiBaseUrl,
+    );
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('API Configuration'),
-        content: const Text('API configuration settings will be implemented here.'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'API Base URL:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: urlController,
+              decoration: InputDecoration(
+                hintText: 'https://api.example.com/',
+                prefixIcon: const Icon(Icons.link),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                helperText: 'Enter the base URL for API endpoints',
+              ),
+              keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.done,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Icon(
+                  appStateProvider.isApiHealthy ? Icons.check_circle : Icons.error_outline,
+                  color: appStateProvider.isApiHealthy ? Colors.green : Colors.red,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  appStateProvider.isApiHealthy 
+                      ? 'API is healthy' 
+                      : 'API connection failed',
+                  style: TextStyle(
+                    color: appStateProvider.isApiHealthy ? Colors.green : Colors.red,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              try {
+                await appStateProvider.resetApiBaseUrl();
+                urlController.text = appStateProvider.apiBaseUrl;
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('API URL reset to default')),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to reset: ${e.toString()}')),
+                  );
+                }
+              }
+            },
+            child: const Text('Reset'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newUrl = urlController.text.trim();
+              if (newUrl.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('URL cannot be empty')),
+                );
+                return;
+              }
+
+              try {
+                // Show loading
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const AlertDialog(
+                    content: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(width: 16),
+                        Text('Updating API URL...'),
+                      ],
+                    ),
+                  ),
+                );
+
+                await appStateProvider.updateApiBaseUrl(newUrl);
+                
+                if (mounted) {
+                  Navigator.pop(context); // Close loading
+                  Navigator.pop(context); // Close settings dialog
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('API URL updated successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  Navigator.pop(context); // Close loading
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to update API URL: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Save'),
           ),
         ],
       ),

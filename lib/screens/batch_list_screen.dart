@@ -8,6 +8,7 @@ import '../widgets/loading_widget.dart';
 import '../widgets/error_widget.dart';
 import '../utils/app_colors.dart';
 import '../utils/helpers.dart';
+import 'batch_submission_details_screen.dart';
 
 class BatchListScreen extends StatefulWidget {
   const BatchListScreen({super.key});
@@ -23,8 +24,6 @@ class _BatchListScreenState extends State<BatchListScreen>
   late ScrollController _scrollController;
   
   String _searchQuery = '';
-  String _selectedStatus = 'All';
-  String _sortBy = 'Recent';
   bool _isGridView = false;
 
   @override
@@ -104,26 +103,6 @@ class _BatchListScreenState extends State<BatchListScreen>
               ),
             ),
             const PopupMenuItem(
-              value: 'filter',
-              child: Row(
-                children: [
-                  Icon(Icons.filter_list),
-                  SizedBox(width: 8),
-                  Text('Filter'),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'sort',
-              child: Row(
-                children: [
-                  Icon(Icons.sort),
-                  SizedBox(width: 8),
-                  Text('Sort'),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
               value: 'export',
               child: Row(
                 children: [
@@ -145,10 +124,6 @@ class _BatchListScreenState extends State<BatchListScreen>
         // Search bar
         if (_searchQuery.isNotEmpty || _searchController.text.isNotEmpty)
           _buildSearchBar(),
-        
-        // Filter chips - only show for Available Batches tab
-        if (_tabController.index == 0)
-          _buildFilterChips(),
         
         // Content
         Expanded(
@@ -184,62 +159,6 @@ class _BatchListScreenState extends State<BatchListScreen>
           contentPadding: const EdgeInsets.symmetric(horizontal: 16),
         ),
         onChanged: _onSearchChanged,
-      ),
-    );
-  }
-
-  Widget _buildFilterChips() {
-    return Container(
-      height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  // Status filter
-                  FilterChip(
-                    label: Text('Status: $_selectedStatus'),
-                    selected: _selectedStatus != 'All',
-                    onSelected: (_) => _showStatusFilter(),
-                  ),
-                  const SizedBox(width: 8),
-                  
-                  // Sort filter
-                  FilterChip(
-                    label: Text('Sort: $_sortBy'),
-                    selected: _sortBy != 'Recent',
-                    onSelected: (_) => _showSortOptions(),
-                  ),
-                  const SizedBox(width: 8),
-                  
-                  // Clear filters
-                  if (_selectedStatus != 'All' || _sortBy != 'Recent' || _searchQuery.isNotEmpty)
-                    ActionChip(
-                      label: const Text('Clear'),
-                      onPressed: _clearFilters,
-                      backgroundColor: Colors.grey.shade200,
-                    ),
-                ],
-              ),
-            ),
-          ),
-          // Results count
-          Consumer<BatchProvider>(
-            builder: (context, batchProvider, child) {
-              final filteredBatches = _getFilteredBatches(batchProvider.allBatches);
-              return Text(
-                '${filteredBatches.length} batches',
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 12,
-                ),
-              );
-            },
-          ),
-        ],
       ),
     );
   }
@@ -358,23 +277,57 @@ class _BatchListScreenState extends State<BatchListScreen>
             Text('Item: ${submittedBatch['itemName'] ?? 'Unknown'}'),
             Text('Quantity: ${submittedBatch['quantity'] ?? 'Unknown'}'),
             Text('Submitted: ${submittedBatch['submittedAt'] ?? 'Unknown'}'),
+            const SizedBox(height: 12),
+            // Action buttons row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () => _showBatchSubmissionDetails(submittedBatch),
+                  icon: const Icon(Icons.info_outline, size: 16),
+                  label: const Text('View Details'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                if (submittedBatch['capturedImage'] != null)
+                  TextButton.icon(
+                    onPressed: () => _showFullScreenImage(submittedBatch['capturedImage']),
+                    icon: const Icon(Icons.zoom_in, size: 16),
+                    label: const Text('View Image'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      textStyle: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
             if (submittedBatch['capturedImage'] != null) ...[
               const SizedBox(height: 8),
               Container(
-                height: 100,
+                height: 80,
                 width: double.infinity,
                 decoration: BoxDecoration(
                   border: Border.all(color: AppColors.borderColor),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Image.memory(
-                  submittedBatch['capturedImage'],
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Center(
-                      child: Icon(Icons.image_not_supported, color: Colors.grey),
-                    );
-                  },
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(
+                    submittedBatch['capturedImage'],
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Icon(Icons.image_not_supported, color: Colors.grey),
+                      );
+                    },
+                  ),
                 ),
               ),
             ],
@@ -471,12 +424,6 @@ class _BatchListScreenState extends State<BatchListScreen>
       case 'search':
         _showSearchDialog();
         break;
-      case 'filter':
-        _showFilterDialog();
-        break;
-      case 'sort':
-        _showSortOptions();
-        break;
       case 'export':
         _exportBatches();
         break;
@@ -496,15 +443,6 @@ class _BatchListScreenState extends State<BatchListScreen>
     });
   }
 
-  void _clearFilters() {
-    setState(() {
-      _selectedStatus = 'All';
-      _sortBy = 'Recent';
-      _searchQuery = '';
-    });
-    _searchController.clear();
-  }
-
   void _onBatchTapped(BatchModel batch) {
     final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
     loggingProvider.logApp('Batch details viewed', data: {'batchId': batch.id});
@@ -512,46 +450,85 @@ class _BatchListScreenState extends State<BatchListScreen>
     _showBatchDetails(batch);
   }
 
-  // Helper methods
-  List<BatchModel> _getFilteredBatches(List<BatchModel> batches) {
-    var filtered = batches;
+  void _showFullScreenImage(dynamic imageData) {
+    final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
+    loggingProvider.logApp('Full screen image viewer opened');
 
-    // Apply search filter
-    if (_searchQuery.isNotEmpty) {
-      filtered = filtered.where((batch) {
-        return (batch.batchNumber?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
-               (batch.productName?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
-               (batch.manufacturer?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
-      }).toList();
-    }
-
-    // Apply status filter
-    if (_selectedStatus != 'All') {
-      filtered = filtered.where((batch) {
-        return batch.status?.toLowerCase() == _selectedStatus.toLowerCase();
-      }).toList();
-    }
-
-    // Apply sorting
-    switch (_sortBy) {
-      case 'Name':
-        filtered.sort((a, b) => (a.productName ?? '').compareTo(b.productName ?? ''));
-        break;
-      case 'Batch Number':
-        filtered.sort((a, b) => (a.batchNumber ?? '').compareTo(b.batchNumber ?? ''));
-        break;
-      case 'Expiry Date':
-        filtered.sort((a, b) => (a.expiryDate ?? '').compareTo(b.expiryDate ?? ''));
-        break;
-      case 'Recent':
-      default:
-        filtered.sort((a, b) => b.scannedAt.compareTo(a.scannedAt));
-        break;
-    }
-
-    return filtered;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            title: const Text('Captured Image'),
+            backgroundColor: Colors.black,
+            foregroundColor: Colors.white,
+            actions: [
+              IconButton(
+                onPressed: () {
+                  // TODO: Implement share functionality if needed
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Share functionality coming soon')),
+                  );
+                },
+                icon: const Icon(Icons.share),
+                tooltip: 'Share Image',
+              ),
+            ],
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              panEnabled: true,
+              boundaryMargin: const EdgeInsets.all(20),
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Image.memory(
+                imageData,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Unable to load image',
+                        style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
+  void _showBatchSubmissionDetails(dynamic submittedBatch) {
+    final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
+    loggingProvider.logApp('Batch submission details viewed', data: {
+      'batchNumber': submittedBatch['batchNumber']
+    });
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => BatchSubmissionDetailsScreen(
+          submittedBatch: submittedBatch,
+        ),
+      ),
+    );
+  }
+
+  // Helper methods
+  
   // Dialog methods
   void _showSearchDialog() {
     showDialog(
@@ -577,102 +554,6 @@ class _BatchListScreenState extends State<BatchListScreen>
             child: const Text('Search'),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Filter Batches'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Add filter options here
-            Text('Filter options will be implemented here'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Apply'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showStatusFilter() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'Filter by Status',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            ...['All', 'Active', 'Expired', 'Recalled'].map((status) =>
-              ListTile(
-                title: Text(status),
-                selected: _selectedStatus == status,
-                onTap: () {
-                  setState(() {
-                    _selectedStatus = status;
-                  });
-                  Navigator.pop(context);
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showSortOptions() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'Sort by',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            ...['Recent', 'Name', 'Batch Number', 'Expiry Date'].map((sort) =>
-              ListTile(
-                title: Text(sort),
-                selected: _sortBy == sort,
-                onTap: () {
-                  setState(() {
-                    _sortBy = sort;
-                  });
-                  Navigator.pop(context);
-                },
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

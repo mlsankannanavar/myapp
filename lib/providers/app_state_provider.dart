@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/logging_service.dart';
 import '../models/health_response_model.dart';
@@ -20,6 +21,10 @@ class AppStateProvider with ChangeNotifier {
   DateTime? _lastHealthCheck;
   bool _isInitialized = false;
   String? _errorMessage;
+  String _apiBaseUrl = Constants.apiBaseUrl;
+
+  // Constants for shared preferences
+  static const String _apiBaseUrlKey = 'api_base_url';
 
   // Getters
   AppStatus get appStatus => _appStatus;
@@ -31,6 +36,8 @@ class AppStateProvider with ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isConnected => _connectionStatus == ConnectionStatus.connected;
   bool get isServerHealthy => _serverHealth?.isHealthy ?? false;
+  String get apiBaseUrl => _apiBaseUrl;
+  bool get isApiHealthy => isConnected && isServerHealthy;
 
   AppStateProvider() {
     _initializeApp();
@@ -46,6 +53,12 @@ class AppStateProvider with ChangeNotifier {
 
       // Initialize logging service
       await _logger.initialize();
+      
+      // Load API base URL from preferences
+      await loadApiBaseUrl();
+      
+      // Update API service with loaded URL
+      _apiService.updateBaseUrl(_apiBaseUrl);
       
       // Check initial connectivity
       await _checkConnectivity();
@@ -275,7 +288,6 @@ class AppStateProvider with ChangeNotifier {
   }
 
   // Settings and configuration
-  String get apiBaseUrl => Constants.baseUrl;
   Duration get healthCheckInterval => Constants.connectionCheckInterval;
   int get maxRetryAttempts => Constants.maxRetryAttempts;
 
@@ -284,12 +296,56 @@ class AppStateProvider with ChangeNotifier {
     await _initializeApp();
   }
 
-  // API health status
-  bool get isApiHealthy => _connectionStatus == ConnectionStatus.connected;
-  
   // Set API health status
   void setApiHealthy(bool healthy) {
     _setConnectionStatus(healthy ? ConnectionStatus.connected : ConnectionStatus.disconnected);
+  }
+
+  // API Base URL Management
+  Future<void> loadApiBaseUrl() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _apiBaseUrl = prefs.getString(_apiBaseUrlKey) ?? Constants.apiBaseUrl;
+      _logger.logApp('Loaded API base URL: $_apiBaseUrl');
+      notifyListeners();
+    } catch (e) {
+      _logger.logError('Failed to load API base URL', error: e);
+    }
+  }
+
+  Future<void> updateApiBaseUrl(String newUrl) async {
+    try {
+      // Validate URL format
+      if (!newUrl.startsWith('http://') && !newUrl.startsWith('https://')) {
+        throw ArgumentError('URL must start with http:// or https://');
+      }
+      
+      // Ensure URL ends with /
+      if (!newUrl.endsWith('/')) {
+        newUrl = '$newUrl/';
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_apiBaseUrlKey, newUrl);
+      
+      _apiBaseUrl = newUrl;
+      _logger.logApp('Updated API base URL to: $newUrl');
+      
+      // Update API service base URL
+      _apiService.updateBaseUrl(newUrl);
+      
+      // Re-check API health with new URL
+      await checkApiHealth();
+      
+      notifyListeners();
+    } catch (e) {
+      _logger.logError('Failed to update API base URL', error: e);
+      throw e;
+    }
+  }
+
+  Future<void> resetApiBaseUrl() async {
+    await updateApiBaseUrl(Constants.apiBaseUrl);
   }
 
   // Loading state

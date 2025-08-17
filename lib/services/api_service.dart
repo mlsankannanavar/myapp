@@ -11,34 +11,6 @@ import '../utils/log_level.dart';
 import 'logging_service.dart';
 
 class ApiService {
-
-  /// Submit final batch result to backend
-  Future<ApiResponse<Map<String, dynamic>>> submitMobileBatch({
-    required String sessionId,
-    required String batchNumber,
-    required int quantity,
-    required String captureId,
-    required int confidence,
-    required String matchType,
-    required int submitTimestamp,
-    required String extractedText,
-    required bool selectedFromOptions,
-    List<String>? alternativeMatches,
-  }) async {
-    final endpoint = '/api/submit-mobile-batch/$sessionId';
-    final body = {
-      'batchNumber': batchNumber,
-      'quantity': quantity,
-      'captureId': captureId,
-      'confidence': confidence,
-      'matchType': matchType,
-      'submitTimestamp': submitTimestamp,
-      'extractedText': extractedText,
-      'selectedFromOptions': selectedFromOptions,
-      'alternativeMatches': alternativeMatches ?? [],
-    };
-    return await post(endpoint, body: body);
-  }
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
@@ -46,8 +18,15 @@ class ApiService {
   final LoggingService _logger = LoggingService();
   final http.Client _client = http.Client();
 
-  // Base configuration
-  String get baseUrl => Constants.baseUrl;
+  // Base configuration - now dynamic
+  String _baseUrl = Constants.baseUrl;
+  String get baseUrl => _baseUrl;
+
+  /// Update the base URL for all API calls
+  void updateBaseUrl(String newBaseUrl) {
+    _baseUrl = newBaseUrl;
+    _logger.logNetwork('API base URL updated to: $newBaseUrl');
+  }
   Duration get timeout => Constants.apiTimeout;
   Map<String, String> get defaultHeaders => Helpers.getDefaultHeaders();
 
@@ -136,6 +115,34 @@ class ApiService {
         duration: stopwatch.elapsed,
       );
     }
+  }
+
+  /// Submit final batch result to backend
+  Future<ApiResponse<Map<String, dynamic>>> submitMobileBatch({
+    required String sessionId,
+    required String batchNumber,
+    required int quantity,
+    required String captureId,
+    required int confidence,
+    required String matchType,
+    required int submitTimestamp,
+    required String extractedText,
+    required bool selectedFromOptions,
+    List<String>? alternativeMatches,
+  }) async {
+    final endpoint = '/api/submit-mobile-batch/$sessionId';
+    final body = {
+      'batchNumber': batchNumber,
+      'quantity': quantity,
+      'captureId': captureId,
+      'confidence': confidence,
+      'matchType': matchType,
+      'submitTimestamp': submitTimestamp,
+      'extractedText': extractedText,
+      'selectedFromOptions': selectedFromOptions,
+      'alternativeMatches': alternativeMatches ?? [],
+    };
+    return await post(endpoint, body: body);
   }
 
   // Get filtered batches for a session
