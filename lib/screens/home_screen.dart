@@ -742,46 +742,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  void _showQuickActionMenu() {
-    final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
-    loggingProvider.logApp('Quick action menu opened');
-
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.qr_code_scanner),
-              title: const Text('Scan QR Code'),
-              onTap: () {
-                Navigator.pop(context);
-                _navigateToQRScanner();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.text_fields),
-              title: const Text('OCR Scanner'),
-              onTap: () {
-                Navigator.pop(context);
-                _navigateToOCRScanner();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.terminal),
-              title: const Text('View Logs'),
-              onTap: () {
-                Navigator.pop(context);
-                _navigateToLogViewer();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // Helper methods
   Color _getLogLevelColor(level) {
     switch (level.toString()) {

@@ -692,6 +692,25 @@ class BatchProvider extends ChangeNotifier {
     required String itemName,
     required String quantity,
     required List<int>? capturedImage,
+    // New parameters for comprehensive tracking
+    String? captureId,
+    String? extractedText,
+    int? ocrConfidence,
+    String? matchType,
+    String? matchedBatchId,
+    int? matchConfidence,
+    int? ocrProcessingTimeMs,
+    int? batchMatchingTimeMs,
+    int? apiSubmissionTimeMs,
+    int? totalProcessingTimeMs,
+    int? apiResponseCode,
+    String? apiEndpoint,
+    int? dataSizeBytes,
+    String? apiResponseTime,
+    String? submissionStatus,
+    int? charactersDetected,
+    int? submissionDurationMs,
+    String? selectedFromOptions,
   }) async {
     final submittedBatch = {
       'batchNumber': batchNumber,
@@ -700,6 +719,49 @@ class BatchProvider extends ChangeNotifier {
       'capturedImage': capturedImage,
       'submittedAt': DateTime.now().toIso8601String(),
       'sessionId': _currentSessionId,
+      // Comprehensive API submission details
+      'apiSubmissionDetails': {
+        'captureId': captureId,
+        'selectedFromOptions': selectedFromOptions ?? 'N/A',
+        'submissionDurationMs': submissionDurationMs ?? 0,
+        'apiResponseCode': apiResponseCode,
+      },
+      // Performance metrics
+      'performanceMetrics': {
+        'ocrProcessingTimeMs': ocrProcessingTimeMs ?? 0,
+        'batchMatchingTimeMs': batchMatchingTimeMs ?? 0,
+        'apiSubmissionTimeMs': apiSubmissionTimeMs ?? 0,
+        'totalProcessingTimeMs': totalProcessingTimeMs ?? 0,
+      },
+      // API communication details
+      'apiCommunicationDetails': {
+        'endpointUsed': apiEndpoint,
+        'requestMethod': 'POST',
+        'responseStatus': apiResponseCode,
+        'responseTimeMs': apiResponseTime,
+        'dataSizeBytes': dataSizeBytes ?? 0,
+        'timestamp': DateTime.now().toIso8601String(),
+      },
+      // OCR extraction details
+      'ocrExtractionDetails': {
+        'extractedText': extractedText ?? 'N/A',
+        'ocrConfidencePercent': ocrConfidence ?? 0,
+        'textProcessingTimeMs': ocrProcessingTimeMs ?? 0,
+        'charactersDetected': charactersDetected ?? 0,
+      },
+      // Batch matching details
+      'batchMatchingDetails': {
+        'matchType': matchType ?? 'Unknown',
+        'matchConfidencePercent': matchConfidence ?? 0,
+        'matchedBatchId': matchedBatchId ?? 'N/A',
+        'matchingDurationMs': batchMatchingTimeMs ?? 0,
+      },
+      // Submission summary
+      'submissionSummary': {
+        'product': itemName,
+        'quantitySubmitted': quantity,
+        'submissionStatus': submissionStatus ?? 'Completed Successfully',
+      },
     };
     
     _submittedBatches.add(submittedBatch);
@@ -725,7 +787,7 @@ class BatchProvider extends ChangeNotifier {
           final batchesList = stored['batches'] as List?;
           if (batchesList != null) {
             _submittedBatches = List<Map<String, dynamic>>.from(
-              batchesList.map((e) => Map<String, dynamic>.from(e as Map))
+              batchesList.map((e) => Map<String, dynamic>.from(e))
             );
             notifyListeners();
           }

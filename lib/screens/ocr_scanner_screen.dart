@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
 import 'dart:io';
 
 import '../providers/logging_provider.dart';
@@ -27,6 +28,10 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
   String? _capturedImagePath;
   String? _extractedText;
   List<int>? _lastCapturedImageBytes;
+  
+  // Performance tracking
+  Duration? _ocrProcessingTime;
+  Duration? _matchingProcessingTime;
   
   @override
   void initState() {
@@ -349,8 +354,13 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     final loggingProvider = Provider.of<LoggingProvider>(context, listen: false);
     final apiService = ApiService();
     
+    // Performance tracking
+    final totalProcessingStopwatch = Stopwatch()..start();
+    
     try {
       final sessionId = batchProvider.currentSessionId!;
+      final captureId = DateTime.now().millisecondsSinceEpoch.toString();
+      final submitTimestamp = DateTime.now().millisecondsSinceEpoch;
       
       loggingProvider.logApp('Submitting batch',
         data: {
@@ -361,28 +371,65 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
           'matchType': matchType,
         });
       
+      // API submission with timing
+      final apiSubmissionStopwatch = Stopwatch()..start();
       final resp = await apiService.submitMobileBatch(
         sessionId: sessionId,
         batchNumber: batch.batchNumber ?? batch.batchId ?? '',
         quantity: quantity,
-        captureId: DateTime.now().millisecondsSinceEpoch.toString(),
+        captureId: captureId,
         confidence: confidence,
         matchType: matchType,
-        submitTimestamp: DateTime.now().millisecondsSinceEpoch,
+        submitTimestamp: submitTimestamp,
         extractedText: extractedText,
         selectedFromOptions: matchType != 'manual',
         alternativeMatches: alternativeMatches,
       );
+      apiSubmissionStopwatch.stop();
+      totalProcessingStopwatch.stop();
+      
+      // Calculate data size (approximate)
+      final requestData = {
+        'batchNumber': batch.batchNumber ?? batch.batchId ?? '',
+        'quantity': quantity,
+        'captureId': captureId,
+        'confidence': confidence,
+        'matchType': matchType,
+        'submitTimestamp': submitTimestamp,
+        'extractedText': extractedText,
+        'selectedFromOptions': matchType != 'manual',
+        'alternativeMatches': alternativeMatches,
+      };
+      final dataSizeBytes = jsonEncode(requestData).length;
       
       if (resp.isSuccess) {
         batchProvider.incrementSuccessCount();
         
-        // Add to submitted batches list
+        // Add to submitted batches with comprehensive data
         await batchProvider.addSubmittedBatch(
           batchNumber: batch.batchNumber ?? batch.batchId ?? '',
           itemName: batch.itemName ?? batch.productName ?? 'Unknown Item',
           quantity: quantity.toString(),
           capturedImage: _lastCapturedImageBytes,
+          // Comprehensive tracking data
+          captureId: captureId,
+          extractedText: extractedText,
+          ocrConfidence: confidence,
+          matchType: matchType,
+          matchedBatchId: batch.batchNumber ?? batch.batchId,
+          matchConfidence: confidence,
+          ocrProcessingTimeMs: _ocrProcessingTime?.inMilliseconds ?? 0,
+          batchMatchingTimeMs: _matchingProcessingTime?.inMilliseconds ?? 0,
+          apiSubmissionTimeMs: apiSubmissionStopwatch.elapsed.inMilliseconds,
+          totalProcessingTimeMs: totalProcessingStopwatch.elapsed.inMilliseconds,
+          apiResponseCode: resp.statusCode,
+          apiEndpoint: '/api/submit-mobile-batch/$sessionId',
+          dataSizeBytes: dataSizeBytes,
+          apiResponseTime: '${apiSubmissionStopwatch.elapsed.inMilliseconds} ms',
+          submissionStatus: 'Completed Successfully',
+          charactersDetected: extractedText.length,
+          submissionDurationMs: apiSubmissionStopwatch.elapsed.inMilliseconds,
+          selectedFromOptions: matchType != 'manual' ? 'N/A' : 'N/A',
         );
         
         loggingProvider.logSuccess('Batch submitted successfully');
@@ -391,11 +438,61 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
       } else {
         batchProvider.incrementErrorCount();
         loggingProvider.logError('Batch submission failed: ${resp.message}');
+        
+        // Still track failed submissions for analytics
+        await batchProvider.addSubmittedBatch(
+          batchNumber: batch.batchNumber ?? batch.batchId ?? '',
+          itemName: batch.itemName ?? batch.productName ?? 'Unknown Item',
+          quantity: quantity.toString(),
+          capturedImage: _lastCapturedImageBytes,
+          captureId: captureId,
+          extractedText: extractedText,
+          ocrConfidence: confidence,
+          matchType: matchType,
+          matchedBatchId: batch.batchNumber ?? batch.batchId,
+          matchConfidence: confidence,
+          ocrProcessingTimeMs: _ocrProcessingTime?.inMilliseconds ?? 0,
+          batchMatchingTimeMs: _matchingProcessingTime?.inMilliseconds ?? 0,
+          apiSubmissionTimeMs: apiSubmissionStopwatch.elapsed.inMilliseconds,
+          totalProcessingTimeMs: totalProcessingStopwatch.elapsed.inMilliseconds,
+          apiResponseCode: resp.statusCode ?? 0,
+          apiEndpoint: '/api/submit-mobile-batch/$sessionId',
+          dataSizeBytes: dataSizeBytes,
+          apiResponseTime: '${apiSubmissionStopwatch.elapsed.inMilliseconds} ms',
+          submissionStatus: 'Failed: ${resp.message ?? 'Unknown error'}',
+          charactersDetected: extractedText.length,
+          submissionDurationMs: apiSubmissionStopwatch.elapsed.inMilliseconds,
+          selectedFromOptions: matchType != 'manual' ? 'N/A' : 'N/A',
+        );
+        
         _showInfoDialog('Failed to submit batch: \n${resp.message ?? 'Unknown error'}');
       }
     } catch (e, stackTrace) {
+      totalProcessingStopwatch.stop();
       batchProvider.incrementErrorCount();
       loggingProvider.logError('Batch submission error', error: e, stackTrace: stackTrace);
+      
+      // Track error submissions
+      try {
+        await batchProvider.addSubmittedBatch(
+          batchNumber: batch?.batchNumber ?? batch?.batchId ?? 'Unknown',
+          itemName: batch?.itemName ?? batch?.productName ?? 'Unknown Item',
+          quantity: quantity.toString(),
+          capturedImage: _lastCapturedImageBytes,
+          captureId: DateTime.now().millisecondsSinceEpoch.toString(),
+          extractedText: extractedText,
+          ocrConfidence: confidence,
+          matchType: matchType,
+          ocrProcessingTimeMs: _ocrProcessingTime?.inMilliseconds ?? 0,
+          batchMatchingTimeMs: _matchingProcessingTime?.inMilliseconds ?? 0,
+          totalProcessingTimeMs: totalProcessingStopwatch.elapsed.inMilliseconds,
+          submissionStatus: 'Error: ${e.toString()}',
+          charactersDetected: extractedText.length,
+        );
+      } catch (_) {
+        // Ignore storage errors during error handling
+      }
+      
       _showInfoDialog('Failed to submit batch: ${e.toString()}');
     }
   }
@@ -972,11 +1069,17 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
         }
       }
 
+      // Start timing OCR processing
+      final ocrStopwatch = Stopwatch()..start();
+      
       // Use the new auto-matching method
       final result = await _ocrService.captureAndExtractTextWithMatching(
         availableBatches: batchProvider.batches,
         similarityThreshold: 0.75,
       );
+      
+      ocrStopwatch.stop();
+      _ocrProcessingTime = ocrStopwatch.elapsed;
 
       if (result == null || !result['success']) {
         throw Exception(result?['error'] ?? 'Failed to process image');
@@ -997,12 +1100,19 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
         'textLength': extractedText.length,
         'matchesFound': matches.length,
         'nearestMatches': nearestMatches.length,
+        'ocrProcessingTimeMs': _ocrProcessingTime?.inMilliseconds,
       });
 
       batchProvider.incrementScanCount();
 
+      // Start timing batch matching (if not already done by OCR service)
+      final matchingStopwatch = Stopwatch()..start();
+      
       // Handle matching results with new logic
       if (matches.isNotEmpty) {
+        matchingStopwatch.stop();
+        _matchingProcessingTime = matchingStopwatch.elapsed;
+        
         final bestMatch = matches.first;
         final batch = bestMatch.batch;
         final confidence = (bestMatch.similarity * 100).toInt();
@@ -1032,10 +1142,14 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
         } else {
           // Nearest matches (no exact expiry match) - show user options
           loggingProvider.logWarning('No exact matches found. Showing ${matches.length} nearest matches for user decision');
+          matchingStopwatch.stop();
+          _matchingProcessingTime = matchingStopwatch.elapsed;
           await _showNearestMatchesDialog(matches, extractedText);
         }
       } else {
         // No matches at all
+        matchingStopwatch.stop();
+        _matchingProcessingTime = matchingStopwatch.elapsed;
         _showInfoDialog('No matching batches found. Please verify the text extraction or try manual entry.');
       }
 

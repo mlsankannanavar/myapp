@@ -102,7 +102,8 @@ class _BatchSubmissionDetailsScreenState extends State<BatchSubmissionDetailsScr
             _buildInfoRow('Batch Number', widget.submittedBatch['batchNumber'] ?? 'Unknown'),
             _buildInfoRow('Product', widget.submittedBatch['itemName'] ?? 'Unknown'),
             _buildInfoRow('Quantity Submitted', '${widget.submittedBatch['quantity'] ?? 'Unknown'}'),
-            _buildInfoRow('Submission Status', 'Completed Successfully'),
+            _buildInfoRow('Submission Status', 
+              widget.submittedBatch['submissionSummary']?['submissionStatus'] ?? 'Completed Successfully'),
             _buildInfoRow('Submitted At', _formatDateTime(widget.submittedBatch['submittedAt'])),
           ],
         ),
@@ -218,10 +219,14 @@ class _BatchSubmissionDetailsScreenState extends State<BatchSubmissionDetailsScr
               ],
             ),
             const SizedBox(height: 12),
-            _buildInfoRow('Extracted Text', widget.submittedBatch['extractedText'] ?? 'N/A'),
-            _buildInfoRow('OCR Confidence', '${widget.submittedBatch['ocrConfidence'] ?? 'N/A'}%'),
-            _buildInfoRow('Text Processing Time', '${widget.submittedBatch['extractionDuration'] ?? 'N/A'} ms'),
-            _buildInfoRow('Characters Detected', '${(widget.submittedBatch['extractedText'] ?? '').length}'),
+            _buildInfoRow('Extracted Text', 
+              widget.submittedBatch['ocrExtractionDetails']?['extractedText'] ?? 'N/A'),
+            _buildInfoRow('OCR Confidence', 
+              '${widget.submittedBatch['ocrExtractionDetails']?['ocrConfidencePercent'] ?? 'N/A'}%'),
+            _buildInfoRow('Text Processing Time', 
+              '${widget.submittedBatch['ocrExtractionDetails']?['textProcessingTimeMs'] ?? 'N/A'} ms'),
+            _buildInfoRow('Characters Detected', 
+              '${widget.submittedBatch['ocrExtractionDetails']?['charactersDetected'] ?? 0}'),
           ],
         ),
       ),
@@ -246,10 +251,14 @@ class _BatchSubmissionDetailsScreenState extends State<BatchSubmissionDetailsScr
               ],
             ),
             const SizedBox(height: 12),
-            _buildInfoRow('Match Type', widget.submittedBatch['matchType'] ?? 'Unknown'),
-            _buildInfoRow('Match Confidence', '${widget.submittedBatch['confidence'] ?? 'N/A'}%'),
-            _buildInfoRow('Matched Batch', widget.submittedBatch['matchedBatch'] ?? 'N/A'),
-            _buildInfoRow('Matching Duration', '${widget.submittedBatch['matchingDuration'] ?? 'N/A'} ms'),
+            _buildInfoRow('Match Type', 
+              widget.submittedBatch['batchMatchingDetails']?['matchType'] ?? 'Unknown'),
+            _buildInfoRow('Match Confidence', 
+              '${widget.submittedBatch['batchMatchingDetails']?['matchConfidencePercent'] ?? 'N/A'}%'),
+            _buildInfoRow('Matched Batch', 
+              widget.submittedBatch['batchMatchingDetails']?['matchedBatchId'] ?? 'N/A'),
+            _buildInfoRow('Matching Duration', 
+              '${widget.submittedBatch['batchMatchingDetails']?['matchingDurationMs'] ?? 'N/A'} ms'),
             if (widget.submittedBatch['alternativeMatches'] != null && 
                 (widget.submittedBatch['alternativeMatches'] as List).isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -290,9 +299,14 @@ class _BatchSubmissionDetailsScreenState extends State<BatchSubmissionDetailsScr
             ),
             const SizedBox(height: 12),
             _buildInfoRow('Session ID', widget.submittedBatch['sessionId'] ?? 'N/A'),
-            _buildInfoRow('Capture ID', widget.submittedBatch['captureId'] ?? 'N/A'),
-            _buildInfoRow('Selected from Options', widget.submittedBatch['selectedFromOptions']?.toString() ?? 'N/A'),
-            _buildInfoRow('Submission Duration', '${widget.submittedBatch['submissionDuration'] ?? 'N/A'} ms'),
+            _buildInfoRow('Capture ID', 
+              widget.submittedBatch['apiSubmissionDetails']?['captureId'] ?? 'N/A'),
+            _buildInfoRow('Selected from Options', 
+              widget.submittedBatch['apiSubmissionDetails']?['selectedFromOptions'] ?? 'N/A'),
+            _buildInfoRow('Submission Duration', 
+              '${widget.submittedBatch['apiSubmissionDetails']?['submissionDurationMs'] ?? 'N/A'} ms'),
+            _buildInfoRow('API Response Code', 
+              '${widget.submittedBatch['apiSubmissionDetails']?['apiResponseCode'] ?? 'N/A'}'),
             _buildInfoRow('API Response Code', '${widget.submittedBatch['apiResponseCode'] ?? 'N/A'}'),
           ],
         ),
@@ -318,11 +332,16 @@ class _BatchSubmissionDetailsScreenState extends State<BatchSubmissionDetailsScr
               ],
             ),
             const SizedBox(height: 12),
-            _buildTimingRow('OCR Processing', widget.submittedBatch['extractionDuration']),
-            _buildTimingRow('Batch Matching', widget.submittedBatch['matchingDuration']),
-            _buildTimingRow('API Submission', widget.submittedBatch['submissionDuration']),
+            _buildTimingRow('OCR Processing', 
+              widget.submittedBatch['performanceMetrics']?['ocrProcessingTimeMs']),
+            _buildTimingRow('Batch Matching', 
+              widget.submittedBatch['performanceMetrics']?['batchMatchingTimeMs']),
+            _buildTimingRow('API Submission', 
+              widget.submittedBatch['performanceMetrics']?['apiSubmissionTimeMs']),
             const Divider(),
-            _buildTimingRow('Total Processing', _calculateTotalTime(), isTotal: true),
+            _buildTimingRow('Total Processing', 
+              widget.submittedBatch['performanceMetrics']?['totalProcessingTimeMs'] ?? _calculateTotalTime(), 
+              isTotal: true),
           ],
         ),
       ),
@@ -347,12 +366,18 @@ class _BatchSubmissionDetailsScreenState extends State<BatchSubmissionDetailsScr
               ],
             ),
             const SizedBox(height: 12),
-            _buildInfoRow('Endpoint Used', '/api/submit-mobile-batch/${widget.submittedBatch['sessionId'] ?? 'N/A'}'),
-            _buildInfoRow('Request Method', 'POST'),
-            _buildInfoRow('Response Status', '${widget.submittedBatch['apiResponseCode'] ?? 'N/A'}'),
-            _buildInfoRow('Response Time', '${widget.submittedBatch['submissionDuration'] ?? 'N/A'} ms'),
-            _buildInfoRow('Data Size Sent', '${_calculateDataSize()} bytes'),
-            _buildInfoRow('Timestamp', _formatDateTime(widget.submittedBatch['submittedAt'])),
+            _buildInfoRow('Endpoint Used', 
+              widget.submittedBatch['apiCommunicationDetails']?['endpointUsed'] ?? '/api/submit-mobile-batch/${widget.submittedBatch['sessionId'] ?? 'N/A'}'),
+            _buildInfoRow('Request Method', 
+              widget.submittedBatch['apiCommunicationDetails']?['requestMethod'] ?? 'POST'),
+            _buildInfoRow('Response Status', 
+              '${widget.submittedBatch['apiCommunicationDetails']?['responseStatus'] ?? 'N/A'}'),
+            _buildInfoRow('Response Time', 
+              widget.submittedBatch['apiCommunicationDetails']?['responseTimeMs'] ?? 'N/A ms'),
+            _buildInfoRow('Data Size Sent', 
+              '${widget.submittedBatch['apiCommunicationDetails']?['dataSizeBytes'] ?? _calculateDataSize()} bytes'),
+            _buildInfoRow('Timestamp', 
+              _formatDateTime(widget.submittedBatch['apiCommunicationDetails']?['timestamp'] ?? widget.submittedBatch['submittedAt'])),
           ],
         ),
       ),
@@ -431,6 +456,26 @@ class _BatchSubmissionDetailsScreenState extends State<BatchSubmissionDetailsScr
   }
 
   int _calculateTotalTime() {
+    // Try to get from performance metrics first
+    final performanceMetrics = widget.submittedBatch['performanceMetrics'];
+    if (performanceMetrics is Map) {
+      final total = performanceMetrics['totalProcessingTimeMs'];
+      if (total is int) return total;
+      
+      // Calculate from individual metrics
+      int calculated = 0;
+      final ocr = performanceMetrics['ocrProcessingTimeMs'];
+      final matching = performanceMetrics['batchMatchingTimeMs'];
+      final api = performanceMetrics['apiSubmissionTimeMs'];
+      
+      if (ocr is int) calculated += ocr;
+      if (matching is int) calculated += matching;
+      if (api is int) calculated += api;
+      
+      if (calculated > 0) return calculated;
+    }
+    
+    // Fallback to old structure
     final extraction = widget.submittedBatch['extractionDuration'];
     final matching = widget.submittedBatch['matchingDuration'];
     final submission = widget.submittedBatch['submissionDuration'];
