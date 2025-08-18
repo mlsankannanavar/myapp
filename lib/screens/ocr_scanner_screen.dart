@@ -165,8 +165,10 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
     return confirmed == true ? result : null;
   }
 
-  Future<bool> _showBatchConfirmationDialog(dynamic batch, int confidence, bool isExact) async {
-    return await showDialog<bool>(
+  Future<int?> _showBatchConfirmationWithQuantityDialog(dynamic batch, int confidence, bool isExact) async {
+    final TextEditingController quantityController = TextEditingController();
+    
+    return await showDialog<int?>(
       context: context,
       builder: (context) => AlertDialog(
         title: Row(
@@ -176,59 +178,174 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
               color: isExact ? Colors.green : Colors.orange,
             ),
             const SizedBox(width: 8),
-            Text(isExact ? 'Exact Match' : 'Fuzzy Match'),
+            Text(isExact ? 'Exact Match Found' : 'Fuzzy Match Found'),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Batch Number: ${batch.batchNumber ?? batch.batchId}'),
-            if (batch.itemName != null)
-              Text('Item: ${batch.itemName}'),
-            if (batch.expiryDate != null)
-              Text('Expiry: ${batch.expiryDate}'),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isExact ? Colors.green.shade50 : Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isExact ? Colors.green.shade200 : Colors.orange.shade200,
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Batch Details Section
+              Container(
+                width: double.maxFinite,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isExact ? Colors.green.shade50 : Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isExact ? Colors.green.shade200 : Colors.orange.shade200,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.inventory_2,
+                          color: isExact ? Colors.green.shade700 : Colors.orange.shade700,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            batch.batchNumber ?? batch.batchId ?? 'Unknown',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: isExact ? Colors.green.shade700 : Colors.orange.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (batch.itemName != null) ...[
+                      Row(
+                        children: [
+                          Icon(Icons.medication, size: 16, color: Colors.grey.shade600),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Item: ${batch.itemName}',
+                              style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (batch.expiryDate != null) ...[
+                      Row(
+                        children: [
+                          Icon(Icons.schedule, size: 16, color: Colors.red.shade600),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Expiry: ${batch.expiryDate}',
+                              style: TextStyle(fontSize: 14, color: Colors.red.shade600),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.analytics,
+                          size: 16,
+                          color: isExact ? Colors.green.shade700 : Colors.orange.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Confidence: $confidence%',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: isExact ? Colors.green.shade700 : Colors.orange.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.analytics,
-                    color: isExact ? Colors.green.shade700 : Colors.orange.shade700,
+              const SizedBox(height: 20),
+              
+              // Quantity Input Section
+              Text(
+                'Enter Quantity',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: quantityController,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Enter quantity...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Confidence: $confidence%',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: isExact ? Colors.green.shade700 : Colors.orange.shade700,
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: isExact ? Colors.green : Colors.orange,
+                      width: 2,
                     ),
                   ),
-                ],
+                  prefixIcon: Icon(
+                    Icons.add_box,
+                    color: isExact ? Colors.green : Colors.orange,
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey.shade50,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(null), // Retake/Cancel
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.grey.shade600,
+            ),
+            child: const Text('Retake'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Confirm'),
+            onPressed: () {
+              final quantityText = quantityController.text.trim();
+              if (quantityText.isNotEmpty) {
+                final quantity = int.tryParse(quantityText);
+                if (quantity != null && quantity > 0) {
+                  Navigator.of(context).pop(quantity);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a valid quantity')),
+                  );
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter quantity')),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isExact ? Colors.green : Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Submit'),
           ),
         ],
       ),
-    ) ?? false;
+    );
   }
 
   Future<void> _showNearestMatchesDialog(List<dynamic> nearestMatches, String extractedText) async {
@@ -1121,14 +1238,11 @@ class _OCRScannerScreenState extends State<OCRScannerScreen>
           // Exact match: both batch number and expiry date found
           loggingProvider.logSuccess('Exact match found: ${batch.batchNumber ?? batch.batchId}, Confidence: $confidence% (batch + expiry confirmed)');
           
-          // Show confirmation and get quantity
-          final confirmed = await _showBatchConfirmationDialog(batch, confidence, bestMatch.similarity >= 0.99);
-          if (!confirmed) return;
+          // Show streamlined batch details with quantity input
+          final quantity = await _showBatchConfirmationWithQuantityDialog(batch, confidence, bestMatch.similarity >= 0.99);
+          if (quantity == null) return; // User chose "Retake"
 
-          final quantity = await _showQuantityPad();
-          if (quantity == null) return;
-
-          // Submit to API
+          // Submit to API directly
           await _submitBatch(
             batch: batch,
             quantity: quantity,
